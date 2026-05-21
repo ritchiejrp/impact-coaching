@@ -439,7 +439,7 @@ if ('serviceWorker' in navigator) {
   </div>
   <div style="display:flex;gap:6px;">
   <button id="pull-btn" onclick="pullFromDrive()" style="background:none;border:1.5px solid var(--bd);color:var(--t3);border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;font-family:inherit;">⬇️ Pull</button>
-  <button id="sync-btn" onclick="syncNow()">🔄 Sync</button>
+  <button id="sync-btn" onclick="syncNow()">💾 Save</button>
 </div>
 </header>
 
@@ -775,7 +775,7 @@ if ('serviceWorker' in navigator) {
       <div style="display:flex;gap:10px;margin-bottom:12px;">
         <button class="btn btn-b btn-sm" onclick="testScriptUrl()">🧪 Test URL</button>
       </div>
-      <div style="font-size:12px;color:var(--t3);margin-bottom:12px;" id="st-last-sync">Never synced</div>
+      <div style="font-size:12px;color:var(--t3);margin-bottom:12px;" id="st-last-sync">Never saved to Drive</div>
 
       <div style="font-size:13px;color:var(--t2);font-weight:600;margin-bottom:8px;">Setup (one-time, ~5 mins):</div>
       <div class="info-box">
@@ -1547,13 +1547,13 @@ function checkOnline() {
   const pull = document.getElementById("pull-btn");
   const hasUrl = !!DB.settings.scriptUrl;
   if (navigator.onLine && hasUrl) {
-    btn.className = "online"; btn.innerHTML = "🔄 Sync";
+    btn.className = "online"; btn.innerHTML = "💾 Save";
     if (pull) { pull.style.borderColor="var(--blue)"; pull.style.color="var(--blue)"; }
   } else if (!navigator.onLine) {
     btn.className = ""; btn.innerHTML = "📵 Offline";
     if (pull) { pull.style.borderColor="var(--bd)"; pull.style.color="var(--t3)"; }
   } else {
-    btn.className = ""; btn.innerHTML = "🔄 Sync";
+    btn.className = ""; btn.innerHTML = "💾 Save";
     if (pull) { pull.style.borderColor="var(--bd)"; pull.style.color="var(--t3)"; }
   }
 }
@@ -1749,8 +1749,10 @@ function renderProfile(clientId) {
   const c = getClient(clientId);
   if (!c) return;
   const partner = c.partnerId ? getClient(c.partnerId) : null;
-  const sessions = DB.sessions.filter(s=>s.clientId===clientId||s.clientId2===clientId)
-    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const sessions = DB.sessions.filter(s => {
+    if (!clientId) return false;
+    return s.clientId === clientId || (s.clientId2 && s.clientId2 === clientId);
+  }).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const total=sessions.length;
   const now=new Date(), wkStart=new Date(now);
   wkStart.setDate(now.getDate()-now.getDay()); wkStart.setHours(0,0,0,0);
@@ -1912,6 +1914,7 @@ function renderProfile(clientId) {
               ${s.notes?`<div style="margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--t3);font-style:italic">📝 ${s.notes}</div>`:""}
               <div class="hc-btns">
                 ${!isCompleted?`<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord('${s.id}','profile')">📝 Record</button>`:""}
+                ${!isCompleted?`<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
                 <button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession('${s.id}')">📋 Share</button>
                 <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}');renderProfile('${clientId}')">🗑</button>
               </div>
@@ -2547,7 +2550,7 @@ function deleteExercise(id) {
 function renderSettings() {
   document.getElementById("st-url").value = DB.settings.scriptUrl||"";
   const ls = DB.settings.lastSync;
-  document.getElementById("st-last-sync").textContent = ls ? "Last synced: "+fmtDate(ls.split("T")[0]) : "Never synced";
+  document.getElementById("st-last-sync").textContent = ls ? "Last saved: "+fmtDate(ls.split("T")[0]) : "Never saved to Drive";
 }
 
 function saveScriptUrl() {
@@ -2794,6 +2797,7 @@ function saveRecord() {
 function adjustCredits(clientId, amount) {
   const c = getClient(clientId); if (!c) return;
   c.credits = (c.credits||0) + amount;
+  c.updatedAt = new Date().toISOString();
   saveDB(); renderProfile(clientId); renderDashboard();
   toast(`Credits: ${c.credits} remaining`);
 }
@@ -2810,6 +2814,7 @@ function setCreditsExact(clientId) {
   if (isNaN(val)) { toast("Enter a number"); return; }
   const c = getClient(clientId); if (!c) return;
   c.credits = val;
+  c.updatedAt = new Date().toISOString();
   saveDB(); renderProfile(clientId); renderDashboard();
   toast(`Credits set to ${val}`);
 }
@@ -3251,7 +3256,7 @@ async function pullFromDrive() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// GOOGLE DRIVE SYNC
+// SAVE TO DRIVE (push local data up — no merge, no pull)
 // ═══════════════════════════════════════════════════════════════════
 async function syncNow() {
   let url = (DB.settings.scriptUrl||"").trim();
@@ -3261,70 +3266,28 @@ async function syncNow() {
   if (!navigator.onLine) { toast("No internet connection"); return; }
 
   const btn = document.getElementById("sync-btn");
-  btn.className = "syncing"; btn.innerHTML = "🔄 Syncing…";
+  btn.className = "syncing"; btn.innerHTML = "💾 Saving…";
 
   try {
-    let remote = null;
-    try {
-      const res = await fetch(url, {method:"GET", cache:"no-store"});
-      if (!res.ok) throw new Error("HTTP "+res.status);
-      const text = await res.text();
-      if (text && text.trim()!=="null" && text.trim()!=="") remote = JSON.parse(text);
-    } catch(e) { throw new Error("Cannot reach script: "+e.message); }
-
-    if (remote && !remote.error) {
-      // Merge deleted IDs from both sides
-      const allDeleted = [...new Set([...(DB.deletedIds||[]), ...(remote.deletedIds||[])])];
-      const allDeletedClients = [...new Set([...(DB.deletedClientIds||[]), ...(remote.deletedClientIds||[])])];
-      DB.deletedIds = allDeleted;
-      DB.deletedClientIds = allDeletedClients;
-
-      // Sessions: latest updatedAt wins, strip tombstoned
-      const sm = {};
-      [...(remote.sessions||[]), ...DB.sessions].forEach(s=>{
-        if (!sm[s.id] || (s.updatedAt||s.date||"") > (sm[s.id].updatedAt||sm[s.id].date||"")) sm[s.id]=s;
-      });
-      DB.sessions = Object.values(sm)
-        .filter(s=>!allDeleted.includes(s.id))
-        .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-
-      // Clients: latest updatedAt wins, strip tombstoned
-      const cm = {};
-      (remote.clients||[]).forEach(c=>{ cm[c.id]=c; });
-      DB.clients.forEach(c=>{ 
-        if (!cm[c.id] || (c.updatedAt||"") > (cm[c.id].updatedAt||"")) cm[c.id]=c;
-      });
-      DB.clients = Object.values(cm).filter(c=>!allDeletedClients.includes(c.id));
-
-      // Custom exercises: union
-      const em = {};
-      [...(remote.customExercises||[]), ...(DB.customExercises||[])].forEach(e=>{ em[e.id]=e; });
-      DB.customExercises = Object.values(em);
-    }
-    if (remote && remote.error) throw new Error("Script error: "+remote.error);
-
-    // Push merged data
-    const pushRes = await fetch(url, {
-      method:"POST", body:JSON.stringify(DB), headers:{"Content-Type":"text/plain"}
-    });
-    if (!pushRes.ok) throw new Error("Push failed: HTTP "+pushRes.status);
-
+    // Stamp save time before push
     DB.settings.lastSync = new Date().toISOString();
     DB.settings.scriptUrl = url;
     saveDB();
-    btn.className = "online"; btn.innerHTML = "✅ Synced";
-    setTimeout(()=>{ btn.innerHTML="🔄 Sync"; checkOnline(); }, 3000);
-    toast("Sync complete ✓");
-    renderDashboard();
-  // Ensure TDEE history exists
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
-    renderBuildClientChips();
-    renderPage(currentPage);
+
+    const pushRes = await fetch(url, {
+      method:"POST", body:JSON.stringify(DB), headers:{"Content-Type":"text/plain"}
+    });
+    if (!pushRes.ok) throw new Error("HTTP "+pushRes.status);
+
+    btn.className = "online"; btn.innerHTML = "✅ Saved";
+    setTimeout(()=>{ btn.innerHTML="💾 Save"; checkOnline(); }, 3000);
+    toast("Saved to Drive ✓");
+    renderSettings();
 
   } catch(err) {
     btn.className = "error"; btn.innerHTML = "⚠️ Failed";
-    setTimeout(()=>{ btn.className=""; checkOnline(); btn.innerHTML="🔄 Sync"; }, 4000);
-    toast("Sync failed: "+err.message.slice(0,50));
+    setTimeout(()=>{ btn.className=""; checkOnline(); btn.innerHTML="💾 Save"; }, 4000);
+    toast("Save failed: "+err.message.slice(0,50));
   }
 }
 

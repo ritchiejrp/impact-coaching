@@ -489,6 +489,11 @@ if ('serviceWorker' in navigator) {
         <div class="dash-tile-label">Exercise Library</div>
         <div class="dash-tile-sub">Browse &amp; add exercises</div>
       </div>
+      <div class="dash-tile" onclick="nav('history')">
+        <div style="width:72px;height:72px;border-radius:12px;background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:10px;box-shadow:0 4px 14px rgba(0,0,0,.4);">📅</div>
+        <div class="dash-tile-label">Session History</div>
+        <div class="dash-tile-sub" id="tile-hist-sub">All sessions</div>
+      </div>
     </div>
   </div>
 
@@ -697,7 +702,7 @@ if ('serviceWorker' in navigator) {
     </div>
   </div>
 
-  <div class="page" id="pg-clients">
+  <div class="page" id="pg-clients-old" style="display:none!important">
     <div class="pg-title">Clients</div>
     <div class="pg-sub">Manage your client roster</div>
     <button class="btn btn-g btn-blk" style="margin-bottom:16px;" onclick="openClientModal(null)">+ Add Client</button>
@@ -1439,31 +1444,37 @@ function lastWeight(clientId, exerciseName) {
 // ═══════════════════════════════════════════════════════════════════
 function nav(page) {
   currentPage = page;
-  const pageId = page==='clients' ? 'clients-list' : page;
-  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-  const pg = document.getElementById("pg-"+pageId) || document.getElementById("pg-"+page);
+  // Canonical page ID mapping
+  const ID_MAP = {
+    clients: "clients-list",
+    library: "library",
+  };
+  const pageId = ID_MAP[page] || page;
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  const pg = document.getElementById("pg-" + pageId);
   if (pg) pg.classList.add("active");
-  const titles={
+  const TITLES = {
     dashboard:"Impact Coaching", build:"Workout Builder",
     "clients-list":"Clients", clients:"Clients",
     history:"History", library:"Exercise Library", settings:"Settings",
     profile:"Client Profile", record:"Record Session",
     calendar:"Calendar", tdee:"TDEE Calculator", menofit:"MenoFit"
   };
-  document.getElementById("hdr-title").textContent = titles[page]||"Impact Coaching";
+  document.getElementById("hdr-title").textContent = TITLES[page] || "Impact Coaching";
   renderPage(page);
 }
 
 function renderPage(page) {
-  if (page==="dashboard")    renderDashboard();
-  if (page==="clients"||page==="clients-list") renderClientsList();
-  if (page==="history")      renderHistory();
-  if (page==="library")      renderLibrary();
-  if (page==="settings")     renderSettings();
-  if (page==="calendar")     renderCalendar();
-  if (page==="tdee")         renderTDEEPage();
-  if (page==="menofit")      {} // placeholder
-  if (page==="profile"&&profileClientId) renderProfile(profileClientId);
+  if (page === "dashboard")                        { renderDashboard(); }
+  else if (page === "clients" || page === "clients-list") { renderClientsList(); }
+  else if (page === "history")                     { renderHistory(); }
+  else if (page === "library")                     { renderLibrary(); }
+  else if (page === "settings")                    { renderSettings(); }
+  else if (page === "calendar")                    { renderCalendar(); }
+  else if (page === "tdee")                        { renderTDEEPage(); }
+  else if (page === "build")                       { renderBuildClientChips(); renderSlots(); }
+  else if (page === "profile" && profileClientId)  { renderProfile(profileClientId); }
+  // menofit and record are static/self-contained
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1670,6 +1681,11 @@ function renderDashboard() {
     const wkStart = new Date(now); wkStart.setDate(now.getDate()-now.getDay()); wkStart.setHours(0,0,0,0);
     const thisWeek = DB.sessions.filter(s=>new Date(s.date)>=wkStart).length;
     calSub.textContent = thisWeek + " session" + (thisWeek!==1?"s":"") + " this week";
+  }
+  // Update history tile subtitle
+  const histSub = document.getElementById("tile-hist-sub");
+  if (histSub) {
+    histSub.textContent = DB.sessions.length + " session" + (DB.sessions.length!==1?"s":"") + " total";
   }
 }
 

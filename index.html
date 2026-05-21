@@ -637,6 +637,7 @@ if ('serviceWorker' in navigator) {
   </div>
 
 <div class="page" id="pg-build">
+    <button class="back-btn" id="build-back-btn" onclick="buildPageBack()">&#8249; Back</button>
     <div class="pg-title">Build Session</div>
     <div class="pg-sub">Plan a workout</div>
 
@@ -1373,7 +1374,7 @@ function doPost(e) {
 let DB = {clients:[], sessions:[], customExercises:[], settings:{scriptUrl:"", lastSync:null}};
 
 // Current build
-let B = {clientId:null, clientId2:null, date:"", template:"strength1hr", cat:"legs", name:"", rows:[], notes:""};
+let B = {clientId:null, clientId2:null, date:"", template:"strength1hr", cat:"legs", name:"", rows:[], notes:"", fromProfile:null};
 
 // UI
 let currentPage = "build";
@@ -1390,10 +1391,20 @@ const uid = () => (_uid++).toString(36);
 // ═══════════════════════════════════════════════════════════════════
 // STORAGE
 // ═══════════════════════════════════════════════════════════════════
-const SK = "suzanne-v5";
+const SK = "impact-coaching-v1";
 
 function loadDB() {
   try {
+    // Migrate from old key if present
+    const oldKeys = ["suzanne-v5", "suzanne-v4", "suzanne-v3"];
+    for (const oldKey of oldKeys) {
+      const oldRaw = localStorage.getItem(oldKey);
+      if (oldRaw && !localStorage.getItem(SK)) {
+        localStorage.setItem(SK, oldRaw);
+        localStorage.removeItem(oldKey);
+        break;
+      }
+    }
     const raw = localStorage.getItem(SK);
     if (raw) {
       const d = JSON.parse(raw);
@@ -1888,7 +1899,7 @@ function renderProfile(clientId) {
                   ${!isCompleted?`<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord('${s.id}','profile')">📝 Record</button>`:""}
                   ${!isCompleted?`<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
                   <button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession('${s.id}')">📋 Share</button>
-                  <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}');renderProfile('${clientId}')">🗑</button>
+                  <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}')">🗑</button>
                 </div>
               </div>
             </div>`;
@@ -1925,7 +1936,7 @@ function renderProfile(clientId) {
                 ${!isCompleted?`<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord('${s.id}','profile')">📝 Record</button>`:""}
                 ${!isCompleted?`<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
                 <button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession('${s.id}')">📋 Share</button>
-                <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}');renderProfile('${clientId}')">🗑</button>
+                <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}')">🗑</button>
               </div>
             </div>
           </div>`;
@@ -2010,10 +2021,21 @@ function toggleHist(id) {
   if (chev) chev.classList.toggle("open", open);
 }
 
+function buildPageBack() {
+  if (B.fromProfile && getClient(B.fromProfile)) {
+    const cid = B.fromProfile;
+    B.fromProfile = null;
+    viewProfile(cid, "clients");
+  } else {
+    nav("clients");
+  }
+}
+
 function buildForClient(clientId) {
   B.editingSessionId = null;
   B.clientId = clientId;
   B.clientId2 = null;
+  B.fromProfile = clientId; // remember which client opened the builder so we can go back
   const c = getClient(clientId);
   if (c && c.template) loadTemplate(c.template);
   nav("build");
@@ -2061,8 +2083,13 @@ function saveSession() {
   }
   saveDB();
   renderDashboard();
-  // Ensure TDEE history exists
   if (!DB.tdeeHistory) DB.tdeeHistory = [];
+  // If we came from a client profile, return to that client's profile
+  const returnToClient = B.fromProfile || null;
+  B.fromProfile = null; // clear it
+  if (returnToClient && getClient(returnToClient)) {
+    viewProfile(returnToClient, "clients");
+  }
 }
 
 function openShare() {
@@ -2275,6 +2302,8 @@ function saveClient() {
 function editSession(sessionId) {
   const s = DB.sessions.find(x => x.id === sessionId);
   if (!s) { toast("Session not found"); return; }
+  // Track which client profile to return to after save
+  B.fromProfile = profileClientId || s.clientId;
   // Populate builder with existing session data
   B.clientId  = s.clientId;
   B.clientId2 = s.clientId2 || null;
@@ -2402,9 +2431,9 @@ function deleteSession(id) {
   if (!DB.deletedIds.includes(id)) DB.deletedIds.push(id);
   saveDB();
   renderDashboard();
-  // Ensure TDEE history exists
   if (!DB.tdeeHistory) DB.tdeeHistory = [];
   if (currentPage==="history") renderHistory();
+  else if (currentPage==="profile" && profileClientId) renderProfile(profileClientId);
   toast("Deleted");
 }
 

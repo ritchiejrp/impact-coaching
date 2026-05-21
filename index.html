@@ -2642,13 +2642,26 @@ function importData(e) {
   reader.onload = ev => {
     try {
       const data = JSON.parse(ev.target.result);
-      DB = {...DB, ...data};
-      DB.customExercises = DB.customExercises||[];
-      DB.settings = DB.settings||{scriptUrl:"",lastSync:null};
+      // Full replace — no shallow merge that can leave ghost data behind
+      DB.clients         = data.clients         || [];
+      DB.sessions        = data.sessions        || [];
+      DB.customExercises = data.customExercises || [];
+      DB.customSchemes   = data.customSchemes   || {};
+      DB.deletedIds      = data.deletedIds      || [];
+      DB.deletedClientIds= data.deletedClientIds|| [];
+      DB.tdeeHistory     = data.tdeeHistory     || [];
+      if (data.settings && data.settings.scriptUrl) {
+        DB.settings.scriptUrl = data.settings.scriptUrl;
+      }
+      // Clear any stale UI state
+      profileClientId = null;
+      B.clientId = null; B.clientId2 = null; B.fromProfile = null;
       saveDB();
-      toast("Import successful ✓");
-      renderSettings();
+      renderDashboard();
+      renderClientsList();
       renderBuildClientChips();
+      nav("clients");
+      toast("Import successful — " + DB.clients.length + " client(s), " + DB.sessions.length + " session(s)");
     } catch(err) { toast("Import failed — invalid file"); }
   };
   reader.readAsText(file);

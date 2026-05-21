@@ -1371,7 +1371,11 @@ function doPost(e) {
 // ═══════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════
-let DB = {clients:[], sessions:[], customExercises:[], settings:{scriptUrl:"", lastSync:null}};
+let DB = {
+  clients:[], sessions:[], customExercises:[],
+  customSchemes:{}, deletedIds:[], deletedClientIds:[], tdeeHistory:[],
+  settings:{scriptUrl:"", lastSync:null}
+};
 
 // Current build
 let B = {clientId:null, clientId2:null, date:"", template:"strength1hr", cat:"legs", name:"", rows:[], notes:"", fromProfile:null};
@@ -1391,31 +1395,24 @@ const uid = () => (_uid++).toString(36);
 // ═══════════════════════════════════════════════════════════════════
 // STORAGE
 // ═══════════════════════════════════════════════════════════════════
-const SK = "impact-coaching-v1";
+const SK = "impact-coaching-v2";
 
 function loadDB() {
   try {
-    // Migrate from old key if present
-    const oldKeys = ["suzanne-v5", "suzanne-v4", "suzanne-v3"];
-    for (const oldKey of oldKeys) {
-      const oldRaw = localStorage.getItem(oldKey);
-      if (oldRaw && !localStorage.getItem(SK)) {
-        localStorage.setItem(SK, oldRaw);
-        localStorage.removeItem(oldKey);
-        break;
-      }
-    }
     const raw = localStorage.getItem(SK);
     if (raw) {
       const d = JSON.parse(raw);
-      DB = {...DB, ...d};
-      DB.customExercises = DB.customExercises || [];
-      DB.deletedIds = DB.deletedIds || [];
-      DB.deletedClientIds = DB.deletedClientIds || [];
-      DB.customSchemes = DB.customSchemes || {};
-      DB.settings = DB.settings || {scriptUrl:"", lastSync:null};
+      // Merge loaded data, ensuring all arrays/objects are cleanly isolated
+      DB.clients         = (d.clients         || []).map(c => ({...c}));
+      DB.sessions        = (d.sessions        || []).map(s => ({...s, rows: (s.rows||[]).map(r=>({...r}))}));
+      DB.customExercises = (d.customExercises || []).map(e => ({...e}));
+      DB.customSchemes   = {...(d.customSchemes || {})};
+      DB.settings        = {...DB.settings, ...(d.settings || {})};
+      DB.deletedIds      = [...(d.deletedIds      || [])];
+      DB.deletedClientIds= [...(d.deletedClientIds|| [])];
+      DB.tdeeHistory     = [...(d.tdeeHistory     || [])];
     }
-  } catch(e) { /* fresh start */ }
+  } catch(e) { /* fresh start — DB stays at defaults */ }
 }
 
 function saveDB() {
@@ -1543,8 +1540,6 @@ document.addEventListener("DOMContentLoaded", () => {
   checkOnline();
   document.getElementById("script-code-block").textContent = APPS_SCRIPT;
   renderDashboard();
-  // Ensure TDEE history exists
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
 });
 
 function populateTemplateSelects() {
@@ -2032,16 +2027,28 @@ function buildPageBack() {
 }
 
 function buildForClient(clientId) {
-  B.editingSessionId = null;
-  B.clientId = clientId;
-  B.clientId2 = null;
-  B.fromProfile = clientId; // remember which client opened the builder so we can go back
   const c = getClient(clientId);
-  if (c && c.template) loadTemplate(c.template);
+  if (!c) { toast("Client not found"); return; }
+  // Fully reset builder state for this specific client — no bleed from previous build
+  B.editingSessionId = null;
+  B.clientId         = clientId;
+  B.clientId2        = null;
+  B.fromProfile      = clientId;  // remember so save returns to this profile
+  B.notes            = "";
+  B.name             = "";
+  B.date             = todayStr();
+  loadTemplate(c.template || "strength1hr");
   nav("build");
+  // Set date field after nav
+  const dateEl = document.getElementById("b-date");
+  if (dateEl) dateEl.value = B.date;
+  const notesEl = document.getElementById("b-notes");
+  if (notesEl) notesEl.value = "";
+  const nameEl = document.getElementById("b-name");
+  if (nameEl) nameEl.value = "";
   renderBuildClientChips();
   renderSlots();
-  toast("Ready for "+(c?c.name:"client")+" ✓");
+  toast("Ready for " + c.name + " ✓");
 }
 
 function saveSession() {
@@ -2049,29 +2056,35 @@ function saveSession() {
   if (!valid.length) { toast("Add at least one exercise"); return; }
   if (!B.clientId) { toast("Select a client first"); return; }
   const client = getClient(B.clientId);
-  const partner = client&&client.partnerId ? getClient(client.partnerId) : null;
+  if (!client) { toast("Client not found"); return; }
+  const partner = client.partnerId ? getClient(client.partnerId) : null;
   const tDef = TEMPLATES[B.template];
   const sessionName = document.getElementById("b-name").value.trim() ||
-    (client?client.name:"") + (partner?" & "+partner.name:"") +
+    client.name + (partner?" & "+partner.name:"") +
     " — " + (CAT_ICONS[document.getElementById("b-cat").value]||"") +
     " " + (tDef?tDef.name:"Session");
+
+  // Deep-clone rows so builder state is fully isolated from stored data
+  const storedRows = valid.map(r => ({...r, muscles: [...(r.muscles||[])]}));
+
   const session = {
-    id: uid(),
-    clientId: B.clientId,
+    id:        uid(),
+    clientId:  B.clientId,          // always the primary client
     clientId2: partner ? partner.id : (B.clientId2||null),
-    date: document.getElementById("b-date").value||todayStr(),
-    cat: document.getElementById("b-cat").value,
-    template: B.template,
-    name: sessionName,
-    rows: valid,
-    notes: document.getElementById("b-notes").value,
-    week: wkLabel(document.getElementById("b-date").value||todayStr()),
-    status: "planned",
+    date:      document.getElementById("b-date").value||todayStr(),
+    cat:       document.getElementById("b-cat").value,
+    template:  B.template,
+    name:      sessionName,
+    rows:      storedRows,
+    notes:     document.getElementById("b-notes").value,
+    week:      wkLabel(document.getElementById("b-date").value||todayStr()),
+    status:    "planned",
   };
+
   if (B.editingSessionId) {
     const idx = DB.sessions.findIndex(x => x.id === B.editingSessionId);
     if (idx >= 0) {
-      session.id = B.editingSessionId;
+      session.id     = B.editingSessionId;
       session.status = DB.sessions[idx].status; // preserve completed/planned
       DB.sessions[idx] = session;
     }
@@ -2081,12 +2094,13 @@ function saveSession() {
     DB.sessions.unshift(session);
     toast("Session plan saved ✓");
   }
+
   saveDB();
   renderDashboard();
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
-  // If we came from a client profile, return to that client's profile
+
+  // Return to the client profile we came from, or stay on build
   const returnToClient = B.fromProfile || null;
-  B.fromProfile = null; // clear it
+  B.fromProfile = null;
   if (returnToClient && getClient(returnToClient)) {
     viewProfile(returnToClient, "clients");
   }
@@ -2269,28 +2283,48 @@ function pickColor(c) {
 function saveClient() {
   const name = document.getElementById("mc-name").value.trim();
   if (!name) { toast("Enter a client name"); return; }
-  const credits = parseInt(document.getElementById("mc-credits").value)||0;
-  const partnerId = document.getElementById("mc-partner").value||null;
-  const trainingCat = document.getElementById("mc-trainingcat").value||"general";
-  const now = new Date().toISOString();
+  const credits    = parseInt(document.getElementById("mc-credits").value)||0;
+  const partnerId  = document.getElementById("mc-partner").value||null;
+  const trainingCat= document.getElementById("mc-trainingcat").value||"general";
+  const now        = new Date().toISOString();
+
   if (editClientId) {
+    // Edit existing — update fields in-place
     const c = getClient(editClientId);
     if (c) {
-      c.name=name; c.ptType=document.getElementById("mc-type").value;
-      c.template=document.getElementById("mc-template").value;
-      c.color=editingClientColor; c.credits=credits;
-      c.partnerId=partnerId; c.trainingCat=trainingCat;
-      c.updatedAt=now;
+      c.name       = name;
+      c.ptType     = document.getElementById("mc-type").value;
+      c.template   = document.getElementById("mc-template").value;
+      c.color      = editingClientColor;
+      c.credits    = credits;
+      c.partnerId  = partnerId;
+      c.trainingCat= trainingCat;
+      c.updatedAt  = now;
     }
   } else {
-    DB.clients.push({id:uid(),name,ptType:document.getElementById("mc-type").value,
-      template:document.getElementById("mc-template").value,color:editingClientColor,
-      credits,partnerId,trainingCat,status:"active",statsLog:[],updatedAt:now});
+    // New client — completely fresh object, no shared refs
+    DB.clients.push({
+      id:          uid(),
+      name,
+      ptType:      document.getElementById("mc-type").value,
+      template:    document.getElementById("mc-template").value,
+      color:       editingClientColor,
+      credits,
+      partnerId,
+      trainingCat,
+      status:      "active",
+      statsLog:    [],
+      updatedAt:   now,
+    });
   }
+
+  // Keep partner link symmetric
   if (partnerId) {
     const partner = getClient(partnerId);
-    if (partner) { partner.partnerId = editClientId || DB.clients[DB.clients.length-1].id; partner.updatedAt=now; }
+    const newClientId = editClientId || DB.clients[DB.clients.length-1].id;
+    if (partner) { partner.partnerId = newClientId; partner.updatedAt = now; }
   }
+
   saveDB(); closeModal(); renderClients(); renderBuildClientChips(); renderDashboard();
   toast("Client saved ✓");
 }
@@ -2304,22 +2338,21 @@ function editSession(sessionId) {
   if (!s) { toast("Session not found"); return; }
   // Track which client profile to return to after save
   B.fromProfile = profileClientId || s.clientId;
-  // Populate builder with existing session data
-  B.clientId  = s.clientId;
-  B.clientId2 = s.clientId2 || null;
-  B.template  = s.template  || "";
-  B.rows      = JSON.parse(JSON.stringify(s.rows || []));
-  // Ensure every row has an id
+  // Deep-clone session data into builder — no shared refs with stored session
+  B.clientId        = s.clientId;
+  B.clientId2       = s.clientId2 || null;
+  B.template        = s.template  || "";
+  B.rows            = (s.rows || []).map(r => ({...r, muscles:[...(r.muscles||[])]}));
   B.rows.forEach(r => { if (!r.id) r.id = uid(); });
   // Mark as editing so saveSession updates instead of creating new
   B.editingSessionId = sessionId;
   nav("build");
   // Set form fields after nav so elements exist
   setTimeout(() => {
-    const nameEl = document.getElementById("b-name");
-    const dateEl = document.getElementById("b-date");
-    const catEl  = document.getElementById("b-cat");
-    const notesEl= document.getElementById("b-notes");
+    const nameEl  = document.getElementById("b-name");
+    const dateEl  = document.getElementById("b-date");
+    const catEl   = document.getElementById("b-cat");
+    const notesEl = document.getElementById("b-notes");
     if (nameEl)  nameEl.value  = s.name  || "";
     if (dateEl)  dateEl.value  = s.date  || todayStr();
     if (catEl)   catEl.value   = s.cat   || "";
@@ -2426,12 +2459,9 @@ function reuseSession(id) {
 function deleteSession(id) {
   if (!confirm("Delete this session?")) return;
   DB.sessions = DB.sessions.filter(s=>s.id!==id);
-  // Record tombstone so sync never re-imports this session
-  if (!DB.deletedIds) DB.deletedIds = [];
   if (!DB.deletedIds.includes(id)) DB.deletedIds.push(id);
   saveDB();
   renderDashboard();
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
   if (currentPage==="history") renderHistory();
   else if (currentPage==="profile" && profileClientId) renderProfile(profileClientId);
   toast("Deleted");
@@ -2465,7 +2495,6 @@ function addCustomScheme() {
   const group = document.getElementById("sch-new-group").value.trim() || "My Schemes";
   const val   = document.getElementById("sch-new-val").value.trim();
   if (!val) { toast("Enter a scheme value"); return; }
-  if (!DB.customSchemes) DB.customSchemes = {};
   if (!DB.customSchemes[group]) DB.customSchemes[group] = [];
   if (DB.customSchemes[group].includes(val)) { toast("Already exists"); return; }
   DB.customSchemes[group].push(val);
@@ -2642,20 +2671,22 @@ function importData(e) {
   reader.onload = ev => {
     try {
       const data = JSON.parse(ev.target.result);
-      // Full replace — no shallow merge that can leave ghost data behind
-      DB.clients         = data.clients         || [];
-      DB.sessions        = data.sessions        || [];
-      DB.customExercises = data.customExercises || [];
-      DB.customSchemes   = data.customSchemes   || {};
-      DB.deletedIds      = data.deletedIds      || [];
-      DB.deletedClientIds= data.deletedClientIds|| [];
-      DB.tdeeHistory     = data.tdeeHistory     || [];
+      // Deep-clone everything so imported data has no shared refs
+      DB.clients          = (data.clients         || []).map(c => ({...c}));
+      DB.sessions         = (data.sessions        || []).map(s => ({...s, rows:(s.rows||[]).map(r=>({...r}))}));
+      DB.customExercises  = (data.customExercises || []).map(e => ({...e}));
+      DB.customSchemes    = {...(data.customSchemes || {})};
+      DB.deletedIds       = [...(data.deletedIds      || [])];
+      DB.deletedClientIds = [...(data.deletedClientIds|| [])];
+      DB.tdeeHistory      = [...(data.tdeeHistory     || [])];
       if (data.settings && data.settings.scriptUrl) {
         DB.settings.scriptUrl = data.settings.scriptUrl;
       }
-      // Clear any stale UI state
+      // Reset all global UI state cleanly
       profileClientId = null;
-      B.clientId = null; B.clientId2 = null; B.fromProfile = null;
+      histFilterId    = "all";
+      B = {clientId:null, clientId2:null, date:todayStr(), template:"strength1hr",
+           cat:"legs", name:"", rows:[], notes:"", fromProfile:null};
       saveDB();
       renderDashboard();
       renderClientsList();
@@ -2670,9 +2701,17 @@ function importData(e) {
 
 function clearAllData() {
   if (!confirm("Clear ALL data? This cannot be undone.")) return;
-  DB = {clients:[], sessions:[], customExercises:[], settings:{scriptUrl:"",lastSync:null}};
+  DB = {
+    clients:[], sessions:[], customExercises:[],
+    customSchemes:{}, deletedIds:[], deletedClientIds:[], tdeeHistory:[],
+    settings:{scriptUrl:"", lastSync:null}
+  };
   saveDB();
-  B = {clientId:null, clientId2:null, date:todayStr(), template:"strength1hr", cat:"legs", name:"", rows:[], notes:""};
+  // Reset all global UI state
+  profileClientId = null;
+  histFilterId    = "all";
+  B = {clientId:null, clientId2:null, date:todayStr(), template:"strength1hr",
+       cat:"legs", name:"", rows:[], notes:"", fromProfile:null};
   loadTemplate("strength1hr");
   renderBuildClientChips();
   toast("All data cleared");
@@ -2696,8 +2735,6 @@ function toggleClientStatus(clientId) {
   saveDB();
   renderProfile(clientId);
   renderDashboard();
-  // Ensure TDEE history exists
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
   toast(c.name+" marked "+c.status);
 }
 
@@ -2706,10 +2743,8 @@ function deleteClient(clientId) {
   if (!c) return;
   if (!confirm("Delete " + c.name + " and ALL their sessions? This cannot be undone.")) return;
   // Tombstone client
-  if (!DB.deletedClientIds) DB.deletedClientIds = [];
   if (!DB.deletedClientIds.includes(clientId)) DB.deletedClientIds.push(clientId);
   // Tombstone all their sessions
-  if (!DB.deletedIds) DB.deletedIds = [];
   DB.sessions.filter(s=>s.clientId===clientId||s.clientId2===clientId).forEach(s=>{
     if (!DB.deletedIds.includes(s.id)) DB.deletedIds.push(s.id);
   });
@@ -3214,8 +3249,7 @@ function saveTDEE(tdee, targetCals, protein, carbs, fat, goal, clientId) {
       toast("Saved to "+c.name+"'s profile ✓");
     }
   } else {
-    if (!DB.tdeeHistory) DB.tdeeHistory=[];
-    DB.tdeeHistory.unshift(entry);
+      DB.tdeeHistory.unshift(entry);
     toast("TDEE saved ✓");
   }
   saveDB();
@@ -3297,8 +3331,6 @@ async function pullFromDrive() {
 
     saveDB();
     renderDashboard();
-  // Ensure TDEE history exists
-  if (!DB.tdeeHistory) DB.tdeeHistory = [];
     renderBuildClientChips();
     renderPage(currentPage);
 

@@ -1734,14 +1734,23 @@ function renderDashboard() {
 // CLIENT PROFILE
 // ═══════════════════════════════════════════════════════════════════
 let profileClientId = null;
+let profileFromPage = "clients"; // track which page opened the profile for correct back navigation
 
-function viewProfile(clientId) {
+function viewProfile(clientId, fromPage) {
   profileClientId = clientId;
+  profileFromPage = fromPage || currentPage || "clients";
   currentPage = "profile";
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById("pg-profile").classList.add("active");
   document.querySelectorAll(".nb").forEach(b=>b.classList.remove("act"));
   document.getElementById("hdr-title").textContent = "Client Profile";
+  // Update back button to return to wherever we came from
+  const backBtn = document.querySelector("#pg-profile .back-btn");
+  if (backBtn) {
+    const dest = profileFromPage === "clients" ? "clients" : "dashboard";
+    backBtn.textContent = "‹ " + (dest === "clients" ? "Clients" : "Dashboard");
+    backBtn.onclick = () => nav(dest);
+  }
   renderProfile(clientId);
 }
 
@@ -1926,13 +1935,14 @@ function renderProfile(clientId) {
 
   // Inject everything after the build button
   const buildBtn = document.getElementById("prof-build-btn");
+  // Clear prof-history FIRST so no stale onclick handlers from old client survive during re-render
+  document.getElementById("prof-history").innerHTML = "";
   // Always clear and recreate prof-extra so switching clients never bleeds
   let extraEl = document.getElementById("prof-extra");
-  if (extraEl) extraEl.remove();
+  if (extraEl) { extraEl.innerHTML = ""; extraEl.remove(); }
   extraEl = document.createElement("div");
   extraEl.id = "prof-extra";
   buildBtn.parentNode.insertBefore(extraEl, buildBtn.nextSibling);
-  document.getElementById("prof-history").innerHTML = "";
   // Build exercise frequency insight
   const allEx = {};
   sessions.forEach(s=>{
@@ -2675,12 +2685,14 @@ function deleteClient(clientId) {
 // ═══════════════════════════════════════════════════════════════════
 let recSessionId = null;
 let recFromPage = "history";
+let recProfileClientId = null; // snapshot of profileClientId at the moment openRecord is called
 
 function openRecord(sessionId, fromPage) {
   recSessionId = sessionId;
   recFromPage = fromPage || "history";
+  recProfileClientId = profileClientId; // snapshot so saveRecord returns to the correct client
   const backBtn = document.getElementById("rec-back-btn");
-  if (backBtn) backBtn.onclick = () => { nav(recFromPage); if(recFromPage==="profile"&&profileClientId) renderProfile(profileClientId); };
+  if (backBtn) backBtn.onclick = () => { nav(recFromPage); if(recFromPage==="profile"&&recProfileClientId) renderProfile(recProfileClientId); };
   currentPage = "record";
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById("pg-record").classList.add("active");
@@ -2775,7 +2787,9 @@ function saveRecord() {
   toast("Session completed ✓ — credits updated");
   // Return to where we came from — preserve profileClientId
   const returnPage = recFromPage;
-  const returnClient = s.clientId; // always go back to THIS session's client
+  // Use the snapshotted profileClientId so we always return to the client we were viewing,
+  // not the session's primary clientId (which may differ, e.g. partner sessions).
+  const returnClient = recProfileClientId || s.clientId;
   if (returnPage === "profile") {
     profileClientId = returnClient;
     currentPage = "profile";
@@ -2910,7 +2924,7 @@ function renderClientsList() {
     const creditWarn=credits<=0
       ?`<span class="dc-pill" style="background:#1a0000;color:var(--red);border:1px solid #3a0000">⚠️ ${credits===0?"No sessions":credits+" overdue"}</span>`
       :`<span class="dc-pill" style="background:${creditColor}22;color:${creditColor};border:1px solid ${creditColor}44">${credits} left</span>`;
-    return `<div class="dc-card" onclick="viewProfile('${c.id}')">
+    return `<div class="dc-card" onclick="viewProfile('${c.id}','clients')">
       <div class="dc-banner" style="background:linear-gradient(90deg,${c.color},${c.color}88,transparent)"></div>
       <div class="dc-inner">
         <div class="dc-av" style="background:${c.color};box-shadow:0 3px 12px ${c.color}66">${initials(c.name)}</div>

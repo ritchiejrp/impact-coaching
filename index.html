@@ -501,27 +501,10 @@ if ('serviceWorker' in navigator) {
 
   <!-- CLIENT PROFILE PAGE -->
   <div class="page" id="pg-profile">
-    <button class="back-btn" onclick="nav('dashboard')">&#8249; Dashboard</button>
-    <div class="prof-hero">
-      <div class="prof-av" id="prof-av"></div>
-      <div>
-        <div class="prof-name" id="prof-name"></div>
-        <div class="prof-type" id="prof-type"></div>
-        <div class="prof-tpl" id="prof-tpl"></div>
-      </div>
-    </div>
-    <div class="stats-row">
-      <div class="stat-card"><span class="stat-val" id="prof-stat-total">0</span><span class="stat-lbl">Sessions</span></div>
-      <div class="stat-card"><span class="stat-val" id="prof-stat-week">0</span><span class="stat-lbl">This Week</span></div>
-      <div class="stat-card"><span class="stat-val" id="prof-stat-last" style="font-size:14px;padding-top:4px">&#8212;</span><span class="stat-lbl">Last Session</span></div>
-    </div>
-    <button class="prof-build" id="prof-build-btn">&#9999; Build Session</button>
-    <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:monospace;margin-bottom:10px;">Session History</div>
-    <div id="prof-history"></div>
+    <div id="prof-content" style="padding:0;"></div>
   </div>
 
-
-  <!-- RECORD PAGE -->
+  <!-- RECORD  <!-- RECORD PAGE -->
   <div class="page" id="pg-record">
     <button class="back-btn" id="rec-back-btn">&#8249; Back</button>
     <div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:16px;" id="rec-header"></div>
@@ -1487,22 +1470,23 @@ function lastWeight(clientId, exerciseName) {
 function nav(page) {
   try {
     currentPage = page;
-    const ID_MAP = { clients:"clients-list" };
-    const pageId = ID_MAP[page] || page;
-    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-    const pg = document.getElementById("pg-" + pageId);
+    var ID_MAP = { clients: "clients-list" };
+    var pageId  = ID_MAP[page] || page;
+    document.querySelectorAll(".page").forEach(function(p) { p.classList.remove("active"); });
+    var pg = document.getElementById("pg-" + pageId);
     if (!pg) { console.error("PAGE NOT FOUND: pg-" + pageId); return; }
     pg.classList.add("active");
-    const TITLES = {
+    var TITLES = {
       dashboard:"Impact Coaching", build:"Workout Builder",
       "clients-list":"Clients", clients:"Clients",
       history:"History", library:"Exercise Library", settings:"Settings",
       profile:"Client Profile", record:"Record Session",
       calendar:"Calendar", tdee:"TDEE Calculator", menofit:"MenoFit"
     };
-    const titleEl = document.getElementById("hdr-title");
+    var titleEl = document.getElementById("hdr-title");
     if (titleEl) titleEl.textContent = TITLES[page] || "Impact Coaching";
-    renderPage(page);
+    // Profile rendering is only triggered by viewProfile(), not nav()
+    if (page !== "profile") renderPage(page);
   } catch(err) {
     console.error("nav() error for page '" + page + "':", err);
   }
@@ -1510,19 +1494,24 @@ function nav(page) {
 
 function renderPage(page) {
   try {
-    if (page === "dashboard")                              renderDashboard();
+    if (page === "dashboard")                               renderDashboard();
     else if (page === "clients" || page === "clients-list") renderClientsList();
     else if (page === "history")                            renderHistory();
-    else if (page === "library")                            renderLibrary();
+    else if (page === "library") {
+      var ep = document.getElementById("lib-exercises-panel");
+      var sp = document.getElementById("lib-schemes-panel");
+      if (ep) ep.style.display = "block";
+      if (sp) sp.style.display = "none";
+      renderLibrary();
+    }
     else if (page === "settings")                           renderSettings();
     else if (page === "calendar")                           renderCalendar();
     else if (page === "tdee")                               renderTDEEPage();
     else if (page === "build")                              { renderBuildClientChips(); renderSlots(); }
-    else if (page === "profile" && profileClientId)         renderProfile(profileClientId);
+    // NOTE: "profile" is NOT handled here — only viewProfile() triggers renderProfile()
+    // This prevents stale profileClientId from showing wrong client
   } catch(err) {
-    console.error("renderPage() error for '" + page + "':", err);
-    const pg = document.getElementById("pg-" + (page==="clients"?"clients-list":page));
-    if (pg) pg.innerHTML += '<div style="color:red;padding:20px">Render error: ' + err.message + '</div>';
+    console.error("renderPage() error for '" + page + "':", err.message, err);
   }
 }
 
@@ -1743,264 +1732,224 @@ let profileClientId = null;
 let profileFromPage = "clients"; // track which page opened the profile for correct back navigation
 
 function viewProfile(clientId, fromPage) {
+  if (!clientId) { console.error("viewProfile called with no clientId"); return; }
   profileClientId = clientId;
-  profileFromPage = fromPage || currentPage || "clients";
+  profileFromPage = fromPage || currentPage || "clients-list";
   currentPage = "profile";
-  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-  document.getElementById("pg-profile").classList.add("active");
-  document.querySelectorAll(".nb").forEach(b=>b.classList.remove("act"));
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  const pg = document.getElementById("pg-profile");
+  if (!pg) { console.error("pg-profile not found"); return; }
+  pg.classList.add("active");
   document.getElementById("hdr-title").textContent = "Client Profile";
-  // Update back button to return to wherever we came from
-  const backBtn = document.querySelector("#pg-profile .back-btn");
-  if (backBtn) {
-    const dest = profileFromPage === "clients" ? "clients" : "dashboard";
-    backBtn.textContent = "‹ " + (dest === "clients" ? "Clients" : "Dashboard");
-    backBtn.onclick = () => nav(dest);
-  }
   renderProfile(clientId);
 }
 
 function renderProfile(clientId) {
-  const c = getClient(clientId);
-  if (!c) return;
-  const partner = c.partnerId ? getClient(c.partnerId) : null;
-  const sessions = DB.sessions.filter(s => {
-    if (!clientId) return false;
-    return s.clientId === clientId || (s.clientId2 && s.clientId2 === clientId);
-  }).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  const total=sessions.length;
-  const now=new Date(), wkStart=new Date(now);
-  wkStart.setDate(now.getDate()-now.getDay()); wkStart.setHours(0,0,0,0);
-  const thisWeek=sessions.filter(s=>new Date(s.date)>=wkStart).length;
-  const lastDate=sessions[0]?sessions[0].date:null;
-  const tDef=TEMPLATES[c.template];
+  var contentEl = document.getElementById("prof-content");
+  if (!contentEl) { console.error("prof-content not found"); return; }
 
-  // Header
-  const av=document.getElementById("prof-av");
-  av.style.background=c.color; av.textContent=initials(c.name);
-  document.getElementById("prof-name").textContent=c.name;
-  document.getElementById("prof-type").textContent=c.ptType||"General Fitness";
-  const catInfo = TRAINING_CATS[c.trainingCat||"general"];
-  document.getElementById("prof-tpl").textContent=
-    (catInfo?catInfo.icon+" "+catInfo.label+" · ":"")+(tDef?tDef.name:"—")+(partner?" · 👫 "+partner.name:"");
-  // Status bar
-  const isActive=(c.status||"active")==="active";
-  let statusBar=document.getElementById("prof-status-bar");
-  if(!statusBar){
-    statusBar=document.createElement("div");statusBar.id="prof-status-bar";
-    const heroDiv=document.getElementById("prof-av").closest(".prof-hero")||document.getElementById("prof-av").parentNode.parentNode;
-    heroDiv.parentNode.insertBefore(statusBar,heroDiv.nextSibling);
+  var c = getClient(clientId);
+  if (!c) {
+    contentEl.innerHTML = '<div class="empty"><span class="empty-ico">❓</span>Client not found</div>';
+    return;
   }
-  statusBar.innerHTML=`<div class="status-bar">
-    <button class="status-pill ${isActive?"active":"inactive"}" onclick="toggleClientStatus('${c.id}')">
-      ${isActive?"● Active — tap to archive":"○ Inactive — tap to reactivate"}</button>
-    <button class="del-client-btn" onclick="deleteClient('${c.id}')">🗑 Delete</button>
-    <button class="c-edit-btn" onclick="openClientModal('${c.id}')">✎ Edit</button>
-  </div>`;
+
+  var partner  = c.partnerId ? getClient(c.partnerId) : null;
+  var tDef     = TEMPLATES[c.template];
+  var catInfo  = TRAINING_CATS[c.trainingCat || "general"];
+  var isActive = (c.status || "active") === "active";
+
+  var sessions = DB.sessions.filter(function(s) {
+    return s.clientId === clientId || (s.clientId2 && s.clientId2 === clientId);
+  }).sort(function(a, b) { return (b.date || "").localeCompare(a.date || ""); });
+
+  var total = sessions.length;
+  var now = new Date(), wkStart = new Date(now);
+  wkStart.setDate(now.getDate() - now.getDay()); wkStart.setHours(0, 0, 0, 0);
+  var thisWeek  = sessions.filter(function(s) { return new Date(s.date) >= wkStart; }).length;
+  var lastDate  = sessions[0] ? sessions[0].date : null;
+  var credits   = c.credits || 0;
+  var creditColor = credits > 3 ? "var(--green)" : credits > 0 ? "var(--yellow)" : credits === 0 ? "var(--orange)" : "var(--red)";
+  var creditMsg   = credits < 0 ? " (overdue)" : credits === 0 ? " — time to re-purchase!" : "";
+
+  // ── Build HTML as a single string ────────────────────────────────────────
+  var h = "";
+
+  // Back button
+  h += '<button class="back-btn" onclick="nav(\'' + (profileFromPage || "clients-list") + '\')" style="margin-bottom:18px;">&#8249; ' +
+       (profileFromPage === "clients-list" || profileFromPage === "clients" ? "Clients" : "Dashboard") + '</button>';
+
+  // Hero
+  h += '<div class="prof-hero">';
+  h += '<div class="prof-av" style="background:' + c.color + ';box-shadow:0 3px 14px ' + c.color + '66">' + initials(c.name) + '</div>';
+  h += '<div><div class="prof-name">' + c.name + '</div>';
+  h += '<div class="prof-type">' + (c.ptType || "General Fitness") + '</div>';
+  h += '<div class="prof-tpl">' + (catInfo ? catInfo.icon + " " + catInfo.label + " · " : "") + (tDef ? tDef.name : "—") + (partner ? " · 👫 " + partner.name : "") + '</div>';
+  h += '</div></div>';
+
+  // Status bar — always fresh, uses clientId closure
+  h += '<div class="status-bar" style="margin-top:14px;margin-bottom:14px;">';
+  h += '<button class="status-pill ' + (isActive ? "active" : "inactive") + '" onclick="toggleClientStatus(\'' + clientId + '\')">' +
+       (isActive ? "● Active — tap to archive" : "○ Inactive — tap to reactivate") + '</button>';
+  h += '<button class="del-client-btn" onclick="deleteClient(\'' + clientId + '\')">🗑 Delete</button>';
+  h += '<button class="c-edit-btn" onclick="openClientModal(\'' + clientId + '\')">✎ Edit</button>';
+  h += '</div>';
 
   // Stats
-  document.getElementById("prof-stat-total").textContent=total;
-  document.getElementById("prof-stat-week").textContent=thisWeek;
-  document.getElementById("prof-stat-last").textContent=lastDate
-    ?new Date(lastDate).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):"—";
+  h += '<div class="stats-row">';
+  h += '<div class="stat-card"><span class="stat-val">' + total + '</span><span class="stat-lbl">Sessions</span></div>';
+  h += '<div class="stat-card"><span class="stat-val">' + thisWeek + '</span><span class="stat-lbl">This Week</span></div>';
+  h += '<div class="stat-card"><span class="stat-val" style="font-size:14px;padding-top:4px">' +
+       (lastDate ? new Date(lastDate).toLocaleDateString("en-GB", {day:"numeric", month:"short"}) : "—") +
+       '</span><span class="stat-lbl">Last Session</span></div>';
+  h += '</div>';
 
-  // Build btn
-  document.getElementById("prof-build-btn").onclick=()=>buildForClient(clientId);
+  // Build session button
+  h += '<button class="prof-build" onclick="buildForClient(\'' + clientId + '\')" style="margin-top:14px;">&#9999; Build Session</button>';
 
-  // ── CREDITS ──
-  const credits=c.credits||0;
-  const creditColor=credits>3?"var(--green)":credits>0?"var(--yellow)":credits===0?"var(--orange)":"var(--red)";
-  const creditsHtml=`<div class="prof-sec">Session Credits</div>
-    <div class="credits-box">
-      <div>
-        <div class="credits-num" style="color:${creditColor}">${credits}</div>
-        <div class="credits-lbl">${credits===1?"session":"sessions"} remaining${credits<0?" (overdue)":credits===0?" — time to re-purchase!":""}</div>
-      </div>
-      <div class="credits-btns">
-        <button class="cr-btn" onclick="adjustCredits('${clientId}',5)">+5</button>
-        <button class="cr-btn" onclick="adjustCredits('${clientId}',10)">+10</button>
-        <button class="cr-btn" onclick="adjustCredits('${clientId}',-1)">−1</button>
-        <button class="cr-btn" onclick="adjustCredits('${clientId}',-5)">−5</button>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:4px;align-items:center">
-      <span style="font-size:12px;color:var(--t3);flex-shrink:0">Set to:</span>
-      <input class="inp" id="cr-set-${clientId}" type="number" placeholder="e.g. 10" style="font-family:monospace;text-align:center;flex:1">
-      <button class="cr-btn" onclick="setCreditsExact('${clientId}')">Set</button>
-      <span style="font-size:12px;color:var(--t3);flex-shrink:0">Add:</span>
-      <input class="inp" id="cr-custom-${clientId}" type="number" placeholder="±" style="font-family:monospace;text-align:center;width:60px">
-      <button class="cr-btn" onclick="adjustCreditsCustom('${clientId}')">Go</button>
-    </div>`;
+  // Credits
+  h += '<div class="prof-sec" style="margin-top:18px;">Session Credits</div>';
+  h += '<div class="credits-box">';
+  h += '<div><div class="credits-num" style="color:' + creditColor + '">' + credits + '</div>';
+  h += '<div class="credits-lbl">' + (credits === 1 ? "session" : "sessions") + ' remaining' + creditMsg + '</div></div>';
+  h += '<div class="credits-btns">';
+  h += '<button class="cr-btn" onclick="adjustCredits(\'' + clientId + '\',5)">+5</button>';
+  h += '<button class="cr-btn" onclick="adjustCredits(\'' + clientId + '\',10)">+10</button>';
+  h += '<button class="cr-btn" onclick="adjustCredits(\'' + clientId + '\',-1)">−1</button>';
+  h += '<button class="cr-btn" onclick="adjustCredits(\'' + clientId + '\',-5)">−5</button>';
+  h += '</div></div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:4px;align-items:center;">';
+  h += '<span style="font-size:12px;color:var(--t3);flex-shrink:0">Set to:</span>';
+  h += '<input class="inp" id="cr-set-' + clientId + '" type="number" placeholder="e.g. 10" style="font-family:monospace;text-align:center;flex:1;">';
+  h += '<button class="cr-btn" onclick="setCreditsExact(\'' + clientId + '\')">Set</button>';
+  h += '<span style="font-size:12px;color:var(--t3);flex-shrink:0">Add:</span>';
+  h += '<input class="inp" id="cr-custom-' + clientId + '" type="number" placeholder="±" style="font-family:monospace;text-align:center;width:60px;">';
+  h += '<button class="cr-btn" onclick="adjustCreditsCustom(\'' + clientId + '\')">Go</button>';
+  h += '</div>';
 
-  // ── STATS LOG ──
-  const statsLog=c.statsLog||[];
-  const statsHtml=`<div class="prof-sec">Body Stats &amp; Measurements</div>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:10px;margin-bottom:10px;align-items:end;">
-      <div><span class="lbl">Date</span><input class="inp" type="date" id="sl-date-${clientId}" value="${todayStr()}" style="font-family:monospace;width:auto;min-width:150px;"></div>
-      <div><span class="lbl">Stats / Notes</span><textarea class="inp" id="sl-notes-${clientId}" rows="2" placeholder="e.g. Weight: 72kg, BF: 28%, Waist: 32in…"></textarea></div>
-    </div>
-    <button class="btn btn-b btn-sm" style="margin-bottom:14px;" onclick="addStatEntry('${clientId}')">+ Add Entry</button>
-    ${statsLog.map(e=>`<div class="sl-entry">
-      <div class="sl-date">${e.date}</div>
-      <div class="sl-notes">${e.notes}</div>
-      <button class="sl-del" onclick="deleteStatEntry('${clientId}','${e.id}')">×</button>
-    </div>`).join("")||'<div style="color:var(--t4);font-size:13px;padding:8px 0;">No entries yet</div>'}`;
-
-  // ── SESSION HISTORY ──
-  const histView = window._histView && window._histView[clientId] || "week";
-  const toggleHtml = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:10px;">
-    <div class="prof-sec" style="margin:0;border:none;padding:0">Session History</div>
-    <div class="view-toggle">
-      <button class="vt-btn${histView==="week"?" act":""}" onclick="setHistView('${clientId}','week')">Week</button>
-      <button class="vt-btn${histView==="month"?" act":""}" onclick="setHistView('${clientId}','month')">Month</button>
-    </div>
-  </div>`;
-  let histHtml = toggleHtml;
-  if (!sessions.length) {
-    histHtml += '<div class="empty" style="padding:24px 0"><span class="empty-ico">📋</span>No sessions yet</div>';
+  // Stats log
+  var statsLog = c.statsLog || [];
+  h += '<div class="prof-sec">Body Stats &amp; Measurements</div>';
+  h += '<div style="display:grid;grid-template-columns:auto 1fr;gap:10px;margin-bottom:10px;align-items:end;">';
+  h += '<div><span class="lbl">Date</span><input class="inp" type="date" id="sl-date-' + clientId + '" value="' + todayStr() + '" style="font-family:monospace;width:auto;min-width:150px;"></div>';
+  h += '<div><span class="lbl">Stats / Notes</span><textarea class="inp" id="sl-notes-' + clientId + '" rows="2" placeholder="e.g. Weight: 72kg, BF: 28%, Waist: 32in…"></textarea></div>';
+  h += '</div>';
+  h += '<button class="btn btn-b btn-sm" style="margin-bottom:14px;" onclick="addStatEntry(\'' + clientId + '\')">+ Add Entry</button>';
+  if (statsLog.length) {
+    statsLog.forEach(function(entry) {
+      h += '<div class="sl-entry"><div class="sl-date">' + entry.date + '</div>';
+      h += '<div class="sl-notes">' + entry.notes + '</div>';
+      h += '<button class="sl-del" onclick="deleteStatEntry(\'' + clientId + '\',\'' + entry.id + '\')">×</button></div>';
+    });
   } else {
-    if (histView === "month") {
-      // Group by Month
-      const byMonth = {};
-      sessions.forEach(s=>{
-        const d = new Date(s.date);
-        const mk = d.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
-        if(!byMonth[mk]) byMonth[mk]=[];
-        byMonth[mk].push(s);
-      });
-      histHtml += Object.entries(byMonth).map(([month,mS])=>`
-        <div style="margin-bottom:16px">
-          <div class="month-hdr"><span>${month}</span><span class="month-count">${mS.length} session${mS.length!==1?"s":""}</span></div>
-          ${mS.map(s=>{
-            const ico=CAT_ICONS[s.cat]||"🏋️";
-            const isCompleted=s.status==="completed";
-            const badge=`<span class="badge badge-${isCompleted?"completed":"planned"}">${isCompleted?"✓ Done":"Planned"}</span>`;
-            return `<div class="hc" id="hcp-${s.id}">
-              <div class="hc-head" onclick="toggleHist('hcp-${s.id}')">
-                <span class="hc-ico">${ico}</span>
-                <div class="hc-info">
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="hc-name">${s.name||"Session"}</span>${badge}</div>
-                  <div class="hc-date">${s.date}</div>
-                </div>
-                <span class="hc-chev" id="chev-hcp-${s.id}">›</span>
-              </div>
-              <div class="hc-body" id="hbody-hcp-${s.id}">
-                ${(s.rows||[]).map(r=>`<div class="hc-row">
-                  <div class="hc-ex">${r.exerciseName}</div>
-                  <div class="hc-scheme">${r.scheme||""}${r.target?" · T:"+r.target+"kg":""}${r.actual?` → <span style="color:var(--green)">${r.actual}kg</span>`:""}</div>
-                </div>`).join("")}
-                ${s.notes?`<div style="margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--t3);font-style:italic">📝 ${s.notes}</div>`:""}
-                <div class="hc-btns">
-                  ${!isCompleted?`<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord('${s.id}','profile')">📝 Record</button>`:""}
-                  ${!isCompleted?`<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
-                  <button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession('${s.id}')">📋 Share</button>
-                  <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}')">🗑</button>
-                </div>
-              </div>
-            </div>`;
-          }).join("")}
-        </div>`
-      ).join("");
-    } else {
-    // Week view (default)
-    const grouped={};
-    sessions.forEach(s=>{const w=s.week||wkLabel(s.date);if(!grouped[w])grouped[w]=[];grouped[w].push(s);});
-    histHtml += Object.entries(grouped).map(([week,wS])=>`
-      <div style="margin-bottom:16px">
-        <div class="wk-hdr"><span>${week}</span></div>
-        ${wS.map(s=>{
-          const ico=CAT_ICONS[s.cat]||"🏋️";
-          const isCompleted=s.status==="completed";
-          const badge=`<span class="badge badge-${isCompleted?"completed":"planned"}">${isCompleted?"✓ Done":"Planned"}</span>`;
-          return `<div class="hc" id="hcp-${s.id}">
-            <div class="hc-head" onclick="toggleHist('hcp-${s.id}')">
-              <span class="hc-ico">${ico}</span>
-              <div class="hc-info">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="hc-name">${s.name||"Session"}</span>${badge}</div>
-                <div class="hc-date">${s.date}</div>
-              </div>
-              <span class="hc-chev" id="chev-hcp-${s.id}">›</span>
-            </div>
-            <div class="hc-body" id="hbody-hcp-${s.id}">
-              ${(s.rows||[]).map(r=>`<div class="hc-row">
-                <div class="hc-ex">${r.exerciseName}</div>
-                <div class="hc-scheme">${r.scheme||""}${r.target?" · T:"+r.target+"kg":""}${r.actual?` → <span style="color:var(--green)">${r.actual}kg</span>`:""}${r.actualB?`/<span style="color:var(--teal)">${r.actualB}kg</span>`:""}</div>
-              </div>`).join("")}
-              ${s.notes?`<div style="margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--t3);font-style:italic">📝 ${s.notes}</div>`:""}
-              <div class="hc-btns">
-                ${!isCompleted?`<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord('${s.id}','profile')">📝 Record</button>`:""}
-                ${!isCompleted?`<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
-                <button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession('${s.id}')">📋 Share</button>
-                <button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession('${s.id}')">🗑</button>
-              </div>
-            </div>
-          </div>`;
-        }).join("")}
-      </div>`).join("");
+    h += '<div style="color:var(--t4);font-size:13px;padding:8px 0;">No entries yet</div>';
   }
 
-  // Inject everything after the build button
-  const buildBtn = document.getElementById("prof-build-btn");
-  // Clear prof-history FIRST so no stale onclick handlers from old client survive during re-render
-  document.getElementById("prof-history").innerHTML = "";
-  // Always clear and recreate prof-extra so switching clients never bleeds
-  let extraEl = document.getElementById("prof-extra");
-  if (extraEl) { extraEl.innerHTML = ""; extraEl.remove(); }
-  extraEl = document.createElement("div");
-  extraEl.id = "prof-extra";
-  buildBtn.parentNode.insertBefore(extraEl, buildBtn.nextSibling);
-  // Build exercise frequency insight
-  const allEx = {};
-  sessions.forEach(s=>{
-    (s.rows||[]).forEach(r=>{
+  // Exercise frequency insight
+  var allEx = {};
+  sessions.forEach(function(s) {
+    (s.rows || []).forEach(function(r) {
       if (!r.exerciseName) return;
       if (!allEx[r.exerciseName]) allEx[r.exerciseName] = {count:0, lastDate:"", lastWeight:""};
       allEx[r.exerciseName].count++;
       if (!allEx[r.exerciseName].lastDate || s.date > allEx[r.exerciseName].lastDate) {
-        allEx[r.exerciseName].lastDate = s.date;
-        allEx[r.exerciseName].lastWeight = r.actual||r.target||"";
+        allEx[r.exerciseName].lastDate  = s.date;
+        allEx[r.exerciseName].lastWeight = r.actual || r.target || "";
       }
     });
   });
-  const sortedEx = Object.entries(allEx).sort((a,b)=>new Date(b[1].lastDate)-new Date(a[1].lastDate));
-  const maxCount = sortedEx.length ? Math.max(...sortedEx.map(e=>e[1].count)) : 1;
+  var sortedEx = Object.entries(allEx).sort(function(a, b) { return new Date(b[1].lastDate) - new Date(a[1].lastDate); });
+  var maxCount = sortedEx.length ? Math.max.apply(null, sortedEx.map(function(e) { return e[1].count; })) : 1;
 
-  const freqHtml = `<div class="insight-sec">
-    <div class="insight-hdr" onclick="toggleInsight('freq-${clientId}')">
-      <div class="insight-title"><span>📊</span> Exercise Frequency</div>
-      <span class="hc-chev" id="chev-freq-${clientId}">›</span>
-    </div>
-    <div class="insight-body" id="freq-${clientId}">
-      ${sortedEx.slice(0,20).map(([name,data])=>`
-        <div class="freq-row">
-          <div style="flex:1">
-            <div class="freq-name">${name}</div>
-            <div class="freq-bar-wrap"><div class="freq-bar" style="width:${Math.round(data.count/maxCount*100)}%;background:${c.color}"></div></div>
-          </div>
-          <div class="freq-meta" style="margin-left:12px">
-            ${data.count}× · Last: ${data.lastDate}${data.lastWeight?" · "+data.lastWeight+"kg":""}
-          </div>
-        </div>`).join("")}
-      ${!sortedEx.length?'<div style="color:var(--t4);font-size:13px;padding:8px 0">No exercise data yet</div>':""}
-    </div>
-  </div>`;
+  h += '<div class="insight-sec" style="margin-top:14px;">';
+  h += '<div class="insight-hdr" onclick="toggleInsight(\'freq-' + clientId + '\')">';
+  h += '<div class="insight-title"><span>📊</span> Exercise Frequency</div>';
+  h += '<span class="hc-chev" id="chev-freq-' + clientId + '">›</span></div>';
+  h += '<div class="insight-body" id="freq-' + clientId + '">';
+  if (sortedEx.length) {
+    sortedEx.slice(0, 20).forEach(function(item) {
+      var name = item[0], data = item[1];
+      var pct = Math.round(data.count / maxCount * 100);
+      h += '<div class="freq-row"><div style="flex:1"><div class="freq-name">' + name + '</div>';
+      h += '<div class="freq-bar-wrap"><div class="freq-bar" style="width:' + pct + '%;background:' + c.color + '"></div></div></div>';
+      h += '<div class="freq-meta" style="margin-left:12px">' + data.count + '× · Last: ' + data.lastDate + (data.lastWeight ? " · " + data.lastWeight + "kg" : "") + '</div></div>';
+    });
+  } else {
+    h += '<div style="color:var(--t4);font-size:13px;padding:8px 0">No exercise data yet</div>';
+  }
+  h += '</div></div>';
 
-  // Build exercise lookup
-  const lookupHtml = `<div class="insight-sec">
-    <div class="insight-hdr" onclick="toggleInsight('lookup-${clientId}')">
-      <div class="insight-title"><span>🔍</span> Exercise Lookup</div>
-      <span class="hc-chev" id="chev-lookup-${clientId}">›</span>
-    </div>
-    <div class="insight-body" id="lookup-${clientId}">
-      <div class="lookup-inp">
-        <input class="inp" id="lk-inp-${clientId}" placeholder="Search exercise…" oninput="doLookup('${clientId}')" type="search" style="flex:1;font-size:15px;">
-      </div>
-      <div class="lookup-result" id="lk-res-${clientId}">Type an exercise name above to see their full history for it.</div>
-    </div>
-  </div>`;
+  // Exercise lookup
+  h += '<div class="insight-sec">';
+  h += '<div class="insight-hdr" onclick="toggleInsight(\'lookup-' + clientId + '\')">';
+  h += '<div class="insight-title"><span>🔍</span> Exercise Lookup</div>';
+  h += '<span class="hc-chev" id="chev-lookup-' + clientId + '">›</span></div>';
+  h += '<div class="insight-body" id="lookup-' + clientId + '">';
+  h += '<div class="lookup-inp"><input class="inp" id="lk-inp-' + clientId + '" placeholder="Search exercise…" oninput="doLookup(\'' + clientId + '\')" type="search" style="flex:1;font-size:15px;"></div>';
+  h += '<div class="lookup-result" id="lk-res-' + clientId + '">Type an exercise name to see their history for it.</div>';
+  h += '</div></div>';
 
-  extraEl.innerHTML = creditsHtml + statsHtml + freqHtml + lookupHtml + histHtml;
-}
+  // Session history
+  var histView = (window._histView && window._histView[clientId]) || "week";
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:10px;">';
+  h += '<div class="prof-sec" style="margin:0;border:none;padding:0">Session History</div>';
+  h += '<div class="view-toggle">';
+  h += '<button class="vt-btn' + (histView === "week" ? " act" : "") + '" onclick="setHistView(\'' + clientId + '\',\'week\')">Week</button>';
+  h += '<button class="vt-btn' + (histView === "month" ? " act" : "") + '" onclick="setHistView(\'' + clientId + '\',\'month\')">Month</button>';
+  h += '</div></div>';
+
+  if (!sessions.length) {
+    h += '<div class="empty" style="padding:24px 0"><span class="empty-ico">📋</span>No sessions yet</div>';
+  } else {
+    var grouped = {};
+    if (histView === "month") {
+      sessions.forEach(function(s) {
+        var mk = new Date(s.date).toLocaleDateString("en-GB", {month:"long", year:"numeric"});
+        if (!grouped[mk]) grouped[mk] = [];
+        grouped[mk].push(s);
+      });
+    } else {
+      sessions.forEach(function(s) {
+        var w = s.week || wkLabel(s.date);
+        if (!grouped[w]) grouped[w] = [];
+        grouped[w].push(s);
+      });
+    }
+
+    Object.entries(grouped).forEach(function(entry) {
+      var label = entry[0], grpSessions = entry[1];
+      h += '<div style="margin-bottom:16px">';
+      h += '<div class="wk-hdr"><span>' + label + '</span></div>';
+      grpSessions.forEach(function(s) {
+        var ico = CAT_ICONS[s.cat] || "🏋️";
+        var isCompleted = s.status === "completed";
+        h += '<div class="hc">';
+        h += '<div class="hc-head" onclick="toggleHist(\'hcp-' + s.id + '\')">';
+        h += '<span class="hc-ico">' + ico + '</span>';
+        h += '<div class="hc-info"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+        h += '<span class="hc-name">' + (s.name || "Session") + '</span>';
+        h += '<span class="badge badge-' + (isCompleted ? "completed" : "planned") + '">' + (isCompleted ? "✓ Done" : "Planned") + '</span>';
+        h += '</div><div class="hc-date">' + s.date + '</div></div>';
+        h += '<span class="hc-chev" id="chev-hcp-' + s.id + '">›</span></div>';
+        h += '<div class="hc-body" id="hbody-hcp-' + s.id + '">';
+        (s.rows || []).forEach(function(r) {
+          h += '<div class="hc-row"><div class="hc-ex">' + r.exerciseName + '</div>';
+          h += '<div class="hc-scheme">' + (r.scheme || "") + (r.target ? " · T:" + r.target + "kg" : "") +
+               (r.actual ? ' → <span style="color:var(--green)">' + r.actual + "kg</span>" : "") + '</div></div>';
+        });
+        if (s.notes) h += '<div style="margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--t3);font-style:italic">📝 ' + s.notes + '</div>';
+        h += '<div class="hc-btns">';
+        if (!isCompleted) h += '<button class="btn btn-g" style="font-size:13px;padding:10px;flex:1" onclick="openRecord(\'' + s.id + '\',\'profile\')">📝 Record</button>';
+        h += '<button class="btn btn-b" style="font-size:13px;padding:10px;flex:1" onclick="reshareSession(\'' + s.id + '\')">📋 Share</button>';
+        h += '<button class="btn btn-gh" style="font-size:13px;padding:10px;color:var(--red)" onclick="deleteSession(\'' + s.id + '\');renderProfile(\'' + clientId + '\')">🗑</button>';
+        h += '</div></div></div>';
+      });
+      h += '</div>';
+    });
+  }
+
+  // Set everything at once — single DOM write, no surgery
+  contentEl.innerHTML = h;
 }
 
 // Override toggleHist to handle profile page IDs too
@@ -2027,25 +1976,12 @@ function buildPageBack() {
 }
 
 function buildForClient(clientId) {
-  const c = getClient(clientId);
+  var c = getClient(clientId);
   if (!c) { toast("Client not found"); return; }
-  // Fully reset builder state for this specific client — no bleed from previous build
-  B.editingSessionId = null;
-  B.clientId         = clientId;
-  B.clientId2        = null;
-  B.fromProfile      = clientId;  // remember so save returns to this profile
-  B.notes            = "";
-  B.name             = "";
-  B.date             = todayStr();
-  loadTemplate(c.template || "strength1hr");
+  B.clientId  = clientId;
+  B.clientId2 = null;
+  if (c.template) loadTemplate(c.template);
   nav("build");
-  // Set date field after nav
-  const dateEl = document.getElementById("b-date");
-  if (dateEl) dateEl.value = B.date;
-  const notesEl = document.getElementById("b-notes");
-  if (notesEl) notesEl.value = "";
-  const nameEl = document.getElementById("b-name");
-  if (nameEl) nameEl.value = "";
   renderBuildClientChips();
   renderSlots();
   toast("Ready for " + c.name + " ✓");
@@ -2439,17 +2375,18 @@ function reshareSession(id) {
 }
 
 function reuseSession(id) {
-  const s = DB.sessions.find(x=>x.id===id);
+  var s = DB.sessions.find(function(x) { return x.id === id; });
   if (!s) return;
-  B.clientId = s.clientId;
-  B.template = s.template;
-  B.cat = s.cat;
-  B.rows = (s.rows||[]).map(r=>({...r, id:uid()}));
-  document.getElementById("b-date").value = todayStr();
-  document.getElementById("b-name").value = "";
-  document.getElementById("b-notes").value = s.notes||"";
-  document.getElementById("b-template").value = s.template||"strength1hr";
-  document.getElementById("b-cat").value = s.cat||"legs";
+  B.clientId  = s.clientId;
+  B.clientId2 = s.clientId2 || null;
+  B.template  = s.template;
+  B.cat       = s.cat;
+  B.rows      = (s.rows || []).map(function(r) { return Object.assign({}, r, {id: uid()}); });
+  document.getElementById("b-date").value     = todayStr();
+  document.getElementById("b-name").value     = "";
+  document.getElementById("b-notes").value    = s.notes || "";
+  document.getElementById("b-template").value = s.template || "strength1hr";
+  document.getElementById("b-cat").value      = s.cat || "legs";
   nav("build");
   renderBuildClientChips();
   renderSlots();
@@ -2458,12 +2395,15 @@ function reuseSession(id) {
 
 function deleteSession(id) {
   if (!confirm("Delete this session?")) return;
-  DB.sessions = DB.sessions.filter(s=>s.id!==id);
+  var s = DB.sessions.find(function(x) { return x.id === id; });
+  var affectedClientId = s ? s.clientId : null;
+  if (!DB.deletedIds) DB.deletedIds = [];
   if (!DB.deletedIds.includes(id)) DB.deletedIds.push(id);
+  DB.sessions = DB.sessions.filter(function(sess) { return sess.id !== id; });
   saveDB();
   renderDashboard();
-  if (currentPage==="history") renderHistory();
-  else if (currentPage==="profile" && profileClientId) renderProfile(profileClientId);
+  if (currentPage === "history") renderHistory();
+  if (currentPage === "profile" && affectedClientId) renderProfile(affectedClientId);
   toast("Deleted");
 }
 
@@ -2844,37 +2784,29 @@ function renderRecord(sessionId) {
 }
 
 function saveRecord() {
-  const s = DB.sessions.find(x=>x.id===recSessionId);
-  if (!s) return;
-  (s.rows||[]).forEach(row=>{
-    const a = document.getElementById("actual-"+row.id);
-    const ab = document.getElementById("actualB-"+row.id);
-    if (a) row.actual = a.value.trim();
+  var s = DB.sessions.find(function(x) { return x.id === recSessionId; });
+  if (!s) { toast("Session not found"); return; }
+  (s.rows || []).forEach(function(row) {
+    var a  = document.getElementById("actual-" + row.id);
+    var ab = document.getElementById("actualB-" + row.id);
+    if (a)  row.actual  = a.value.trim();
     if (ab) row.actualB = ab.value.trim();
   });
   s.notes = document.getElementById("rec-notes").value;
-  const wasPlanned = s.status !== "completed";
+  var wasPlanned = s.status !== "completed";
   s.status = "completed";
   if (wasPlanned) {
-    const c = getClient(s.clientId); if (c) c.credits = (c.credits||0) - 1;
-    if (s.clientId2) { const p=getClient(s.clientId2); if(p) p.credits=(p.credits||0)-1; }
+    var c = getClient(s.clientId); if (c) { c.credits = (c.credits || 0) - 1; c.updatedAt = new Date().toISOString(); }
+    if (s.clientId2) { var p = getClient(s.clientId2); if (p) { p.credits = (p.credits || 0) - 1; p.updatedAt = new Date().toISOString(); } }
   }
   saveDB();
   renderDashboard();
   toast("Session completed ✓ — credits updated");
-  // Return to where we came from — preserve profileClientId
-  const returnPage = recFromPage;
-  // Use the snapshotted profileClientId so we always return to the client we were viewing,
-  // not the session's primary clientId (which may differ, e.g. partner sessions).
-  const returnClient = recProfileClientId || s.clientId;
+  // Navigate back — use the client from THIS session, not profileClientId global
+  var returnClient = s.clientId;
+  var returnPage   = recFromPage;
   if (returnPage === "profile") {
-    profileClientId = returnClient;
-    currentPage = "profile";
-    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-    const pg = document.getElementById("pg-profile");
-    if (pg) pg.classList.add("active");
-    document.getElementById("hdr-title").textContent = "Client Profile";
-    renderProfile(returnClient);
+    viewProfile(returnClient, "clients-list");
   } else if (returnPage === "calendar") {
     nav("calendar");
   } else {

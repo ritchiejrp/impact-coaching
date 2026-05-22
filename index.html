@@ -454,6 +454,58 @@ textarea.inp{resize:vertical;line-height:1.5;}
 .meno-form-card{background:var(--bg2);border:1.5px solid #9a3ae833;
   border-radius:14px;padding:18px;margin-bottom:16px;}
 
+
+/* ── MENO LIBRARY ──────────────────────────── */
+.meno-cat-btn{background:var(--bg3);border:1.5px solid var(--bd);color:var(--t3);
+  border-radius:20px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+  font-family:inherit;white-space:nowrap;}
+.meno-cat-btn.act{background:#9a3ae822;border-color:var(--meno-purple);color:var(--meno-purple);}
+.meno-cat-section{margin-bottom:16px;}
+.meno-cat-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 4px;cursor:pointer;border-bottom:1px solid #9a3ae833;margin-bottom:8px;}
+.meno-cat-title{font-size:12px;font-weight:700;color:var(--meno-purple);
+  text-transform:uppercase;letter-spacing:.1em;font-family:monospace;}
+.meno-cat-count{font-size:10px;color:var(--t4);font-family:monospace;}
+.meno-cat-body{display:block;}
+.meno-cat-body.collapsed{display:none;}
+.meno-ex-item{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;background:var(--bg2);border-radius:8px;margin-bottom:6px;
+  border:1px solid var(--bd);}
+.meno-ex-name{font-size:14px;color:var(--t);}
+.meno-ex-add{background:none;border:1.5px solid var(--meno-purple);color:var(--meno-purple);
+  border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;}
+.meno-ex-add:active{background:var(--meno-purple);color:#fff;}
+
+
+/* ── MENO EXERCISE PICKER ────────────────── */
+#meno-picker-modal.open { display:flex !important; }
+.meno-picker-item { padding:12px 10px; border-bottom:1px solid var(--bd); cursor:pointer;
+  font-size:15px; color:var(--t); display:flex; align-items:center; justify-content:space-between; }
+.meno-picker-item:active { background:var(--bg3); }
+.meno-picker-cat-hdr { padding:8px 10px 4px; font-size:10px; color:var(--meno-purple);
+  text-transform:uppercase; letter-spacing:.1em; font-family:monospace; font-weight:700; }
+.meno-slot-btn { width:100%; background:var(--bg3); border:1.5px dashed var(--bd);
+  color:var(--t3); border-radius:8px; padding:11px 12px; text-align:left; cursor:pointer;
+  font-family:inherit; font-size:14px; display:flex; align-items:center; justify-content:space-between; }
+.meno-slot-btn.filled { background:var(--bg2); border-color:var(--meno-purple);
+  border-style:solid; color:var(--t); }
+.meno-slot-btn .slot-clear { color:var(--t4); font-size:18px; line-height:1; }
+.meno-section-card { background:var(--bg2); border:1.5px solid var(--bd);
+  border-radius:12px; padding:14px; margin-bottom:12px; }
+.meno-section-label { font-size:11px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.1em; font-family:monospace; margin-bottom:10px; }
+.meno-fixed-section { background:var(--bg3); border:1px solid var(--bd);
+  border-radius:10px; padding:14px; margin-bottom:12px; text-align:center;
+  font-size:14px; font-weight:600; color:var(--t2); }
+.meno-divider { display:flex; align-items:center; gap:10px; margin:14px 0;
+  color:var(--t4); font-size:12px; font-family:monospace; }
+.meno-divider::before, .meno-divider::after { content:''; flex:1;
+  border-top:1px dashed var(--bd); }
+.meno-finisher-add { background:none; border:1.5px dashed var(--meno-pink);
+  color:var(--meno-pink); border-radius:8px; padding:9px; width:100%;
+  font-family:inherit; font-size:13px; cursor:pointer; margin-top:6px; }
+
 </style>
 
 <script>
@@ -721,8 +773,12 @@ if ('serviceWorker' in navigator) {
 
   <div class="page" id="pg-meno-library">
     <button class="meno-back" onclick="menoNav('dashboard')">&#8249; MenoFit</button>
-    <div style="font-size:20px;font-weight:800;margin-bottom:16px;background:var(--meno-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Library</div>
-    <div class="empty"><span class="empty-ico">&#128218;</span>Exercise library coming soon</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:4px;background:var(--meno-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">MenoFit Library</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;font-family:monospace;">199 exercises across 8 categories</div>
+    <input class="inp" id="meno-lib-search" type="search" placeholder="Search exercises..."
+      oninput="renderMenoLibrary()" style="margin-bottom:14px;">
+    <div id="meno-lib-cats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
+    <div id="meno-lib-list"></div>
   </div>
 
   <div class="page" id="pg-meno-history">
@@ -995,9 +1051,25 @@ if ('serviceWorker' in navigator) {
   </div>
 </div>
 
+
+<!-- MENOFIT EXERCISE PICKER -->
+<div class="modal-overlay" id="meno-picker-overlay" onclick="closeMenoPicker()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;"></div>
+<div id="meno-picker-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;max-height:80vh;background:var(--bg);border-radius:16px 16px 0 0;z-index:2001;overflow:hidden;flex-direction:column;">
+  <div style="padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-size:16px;font-weight:700;" id="meno-picker-title">Select Exercise</div>
+    <button onclick="closeMenoPicker()" style="background:none;border:none;color:var(--t3);font-size:22px;cursor:pointer;">×</button>
+  </div>
+  <div style="padding:10px 16px;border-bottom:1px solid var(--bd);">
+    <input class="inp" id="meno-picker-search" type="search" placeholder="Search exercises..."
+      oninput="renderMenoPicker()" style="margin:0;">
+  </div>
+  <div style="overflow-y:auto;flex:1;padding:8px 16px 24px;" id="meno-picker-list"></div>
+</div>
+
 <div id="toast"></div>
 
 <script>
+
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════
@@ -3468,6 +3540,7 @@ function menoNav(section) {
   else if (section === 'active')   renderMenoActive();
   else if (section === 'history')  renderMenoHistory();
   else if (section === 'builder')  renderMenoBuilder();
+  else if (section === 'library')  { menoLibCat = 'All'; renderMenoLibrary(); }
 }
 
 
@@ -3475,20 +3548,7 @@ function menoNav(section) {
 // MENOFIT MODULE
 // ==================================================================
 
-function menoNav(section) {
-  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
-  var pageId = section === 'dashboard' ? 'pg-menofit' : 'pg-meno-' + section;
-  var pg = document.getElementById(pageId);
-  if (!pg) { console.error('Meno page not found: ' + pageId); return; }
-  pg.classList.add('active');
-  var titles = { dashboard:'MenoFit', active:'Active Block', builder:'New Block', library:'Library', history:'Block History' };
-  var titleEl = document.getElementById('hdr-title');
-  if (titleEl) titleEl.textContent = titles[section] || 'MenoFit';
-  if (section === 'dashboard') renderMenoDashboard();
-  else if (section === 'active')   renderMenoActive();
-  else if (section === 'history')  renderMenoHistory();
-  else if (section === 'builder')  renderMenoBuilder();
-}
+
 
 function renderMenoDashboard() {
   // Lazy init - never touches existing DB data
@@ -3536,15 +3596,13 @@ function createMenoBlock() {
     sessions.push({
       id: uid(), week: w, date: d.toISOString().slice(0, 10),
       status: 'planned', notes: '',
-      warmUp: ['', '', ''],
-      compound: { exercise: '', notes: '' },
-      circuits: [
-        { name: 'Legs A',       exercises: ['', '', '', ''] },
-        { name: 'Legs B',       exercises: ['', '', '', ''] },
-        { name: 'Upper Body A', exercises: ['', '', '', ''] },
-        { name: 'Upper Body B', exercises: ['', '', '', ''] }
-      ],
-      coolDown: ['', '', '']
+      compound:      '',
+      legs1:         ['', '', '', ''],
+      legs2:         ['', '', '', ''],
+      legsFinisher:  [],
+      upperBody1:    ['', '', '', ''],
+      upperBody2:    ['', '', '', ''],
+      upperFinisher: []
     });
   }
   DB.menofit.activeBlock = {
@@ -3607,48 +3665,116 @@ function renderMenoActive() {
 function buildSessEditor(blockId, sess) {
   var q = '"';
   var out = [];
+
   // Date
   out.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-top:8px;">');
   out.push('<span class="lbl" style="margin:0;flex-shrink:0;">Session Date</span>');
   out.push('<input class="inp" type="date" value="' + sess.date + '" style="font-family:monospace;flex:1;" onchange="updateSessDate(' + q + blockId + q + ',' + q + sess.id + q + ',this.value)"></div>');
-  // Warm Up
-  out.push('<div class="circuit-block"><div class="circuit-label" style="color:var(--green)">&#128293; Warm Up</div>');
-  for (var i = 0; i < 3; i++) {
-    out.push('<div class="ex-row"><span class="ex-row-num">' + (i+1) + '</span>');
-    out.push('<input placeholder="Exercise..." value="' + (sess.warmUp[i]||'').replace(/"/g, '&quot;') + '" onchange="updateSessExercise(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;warmUp&quot;,' + i + ',this.value)"></div>');
+
+  // ── WARM UP (fixed label) ───────────────────────────────────────
+  out.push('<div class="meno-fixed-section" style="border-color:var(--green);color:var(--green);">');
+  out.push('&#128293; <b>Warm Up</b></div>');
+
+  // ── COMPOUND (single exercise picker) ──────────────────────────
+  out.push('<div class="meno-section-card" style="border-color:var(--meno-orange)44;">');
+  out.push('<div class="meno-section-label" style="color:var(--meno-orange)">&#127947; Compound (Group)</div>');
+  var comp = sess.compound || '';
+  out.push('<button class="meno-slot-btn' + (comp ? ' filled' : '') + '" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;compound&quot;,0,&quot;Compound&quot;)">');
+  out.push('<span>' + (comp || 'Tap to select exercise...') + '</span>');
+  if (comp) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;compound&quot;,0)">&#215;</span>');
+  out.push('</button></div>');
+
+  // ── LEGS 1 ──────────────────────────────────────────────────────
+  out.push('<div class="meno-section-card">');
+  out.push('<div class="meno-section-label" style="color:var(--meno-purple)">&#129463; Legs 1 <span style="font-weight:400;color:var(--t3);">(Group 1 rotates)</span></div>');
+  for (var i = 0; i < 4; i++) {
+    var val = (sess.legs1 && sess.legs1[i]) || '';
+    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs1&quot;,' + i + ',&quot;Legs&quot;)">');
+    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
+    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs1&quot;,' + i + ')">&#215;</span>');
+    out.push('</button>');
   }
   out.push('</div>');
-  // Compound
-  out.push('<div class="circuit-block"><div class="circuit-label" style="color:var(--meno-orange)">&#127947; Compound (Group)</div>');
-  out.push('<div class="ex-row"><input placeholder="e.g. Deadlift / Back Squat / Sumo Deadlift" value="' + (sess.compound.exercise||'').replace(/"/g,'&quot;') + '" onchange="updateSessCompound(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;exercise&quot;,this.value)"></div>');
-  out.push('<div class="ex-row"><input placeholder="Notes / load..." value="' + (sess.compound.notes||'').replace(/"/g,'&quot;') + '" style="color:var(--t3);" onchange="updateSessCompound(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;notes&quot;,this.value)"></div></div>');
-  // Circuits
-  var circColors = ['var(--meno-purple)','var(--meno-pink)','var(--blue)','var(--teal)'];
-  var circEmoji  = ['&#129463;','&#129463;','&#128170;','&#128170;'];
-  for (var ci = 0; ci < 4; ci++) {
-    out.push('<div class="circuit-block"><div class="circuit-label" style="color:' + circColors[ci] + '">' + circEmoji[ci] + ' ' + sess.circuits[ci].name + '</div>');
-    for (var ei = 0; ei < 4; ei++) {
-      out.push('<div class="ex-row"><span class="ex-row-num">' + (ei+1) + '</span>');
-      out.push('<input placeholder="Exercise..." value="' + (sess.circuits[ci].exercises[ei]||'').replace(/"/g,'&quot;') + '" onchange="updateSessCircuit(' + q + blockId + q + ',' + q + sess.id + q + ',' + ci + ',' + ei + ',this.value)"></div>');
-    }
+
+  // ── LEGS 2 ──────────────────────────────────────────────────────
+  out.push('<div class="meno-section-card">');
+  out.push('<div class="meno-section-label" style="color:var(--meno-pink)">&#129463; Legs 2 <span style="font-weight:400;color:var(--t3);">(Group 2 rotates)</span></div>');
+  for (var i = 0; i < 4; i++) {
+    var val = (sess.legs2 && sess.legs2[i]) || '';
+    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs2&quot;,' + i + ',&quot;Legs&quot;)">');
+    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
+    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs2&quot;,' + i + ')">&#215;</span>');
+    out.push('</button>');
+  }
+  out.push('</div>');
+
+  // ── LEGS FINISHER (optional) ────────────────────────────────────
+  out.push('<div class="meno-section-card" style="border-color:var(--meno-purple)33;">');
+  out.push('<div class="meno-section-label" style="color:var(--meno-purple)">&#127937; Legs Finisher <span style="font-weight:400;color:var(--t4);font-size:10px;">OPTIONAL</span></div>');
+  var lf = sess.legsFinisher || [];
+  lf.forEach(function(ex, i) {
+    out.push('<div style="display:flex;gap:6px;margin-bottom:6px;">');
+    out.push('<button class="meno-slot-btn filled" style="flex:1;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,' + i + ',&quot;Legs&quot;)"><span>' + ex + '</span></button>');
+    out.push('<button onclick="removeMenoFinisherEx(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,' + i + ')" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
     out.push('</div>');
-  }
-  // Cool Down
-  out.push('<div class="circuit-block"><div class="circuit-label" style="color:var(--teal)">&#129510; Cool Down &amp; Stretch</div>');
-  for (var cd = 0; cd < 3; cd++) {
-    out.push('<div class="ex-row"><span class="ex-row-num">' + (cd+1) + '</span>');
-    out.push('<input placeholder="Stretch..." value="' + (sess.coolDown[cd]||'').replace(/"/g,'&quot;') + '" onchange="updateSessExercise(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;coolDown&quot;,' + cd + ',this.value)"></div>');
+  });
+  out.push('<button class="meno-finisher-add" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,-1,&quot;Legs&quot;)">+ Add Exercise</button>');
+  out.push('</div>');
+
+  // ── BREAK ────────────────────────────────────────────────────────
+  out.push('<div class="meno-divider">&#9679; Break / Rest / Reset &#9679;</div>');
+
+  // ── UPPER BODY 1 ─────────────────────────────────────────────────
+  out.push('<div class="meno-section-card">');
+  out.push('<div class="meno-section-label" style="color:var(--blue)">&#128170; Upper Body 1 <span style="font-weight:400;color:var(--t3);">(Group 1 rotates)</span></div>');
+  for (var i = 0; i < 4; i++) {
+    var val = (sess.upperBody1 && sess.upperBody1[i]) || '';
+    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody1&quot;,' + i + ',&quot;Upper Body&quot;)">');
+    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
+    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody1&quot;,' + i + ')">&#215;</span>');
+    out.push('</button>');
   }
   out.push('</div>');
-  // Notes
-  out.push('<div style="margin-bottom:12px;"><span class="lbl">Session Notes</span>');
+
+  // ── UPPER BODY 2 ─────────────────────────────────────────────────
+  out.push('<div class="meno-section-card">');
+  out.push('<div class="meno-section-label" style="color:var(--teal)">&#128170; Upper Body 2 <span style="font-weight:400;color:var(--t3);">(Group 2 rotates)</span></div>');
+  for (var i = 0; i < 4; i++) {
+    var val = (sess.upperBody2 && sess.upperBody2[i]) || '';
+    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody2&quot;,' + i + ',&quot;Upper Body&quot;)">');
+    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
+    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody2&quot;,' + i + ')">&#215;</span>');
+    out.push('</button>');
+  }
+  out.push('</div>');
+
+  // ── UPPER FINISHER (optional) ────────────────────────────────────
+  out.push('<div class="meno-section-card" style="border-color:var(--teal)33;">');
+  out.push('<div class="meno-section-label" style="color:var(--teal)">&#127937; Upper Body Finisher <span style="font-weight:400;color:var(--t4);font-size:10px;">OPTIONAL</span></div>');
+  var uf = sess.upperFinisher || [];
+  uf.forEach(function(ex, i) {
+    out.push('<div style="display:flex;gap:6px;margin-bottom:6px;">');
+    out.push('<button class="meno-slot-btn filled" style="flex:1;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,' + i + ',&quot;Upper Body&quot;)"><span>' + ex + '</span></button>');
+    out.push('<button onclick="removeMenoFinisherEx(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,' + i + ')" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
+    out.push('</div>');
+  });
+  out.push('<button class="meno-finisher-add" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,-1,&quot;Upper Body&quot;)">+ Add Exercise</button>');
+  out.push('</div>');
+
+  // ── COOL DOWN (fixed label) ─────────────────────────────────────
+  out.push('<div class="meno-fixed-section" style="border-color:var(--teal);color:var(--teal);">');
+  out.push('&#129510; <b>Cool Down &amp; Stretches</b></div>');
+
+  // ── NOTES + COMPLETE ────────────────────────────────────────────
+  out.push('<div style="margin-bottom:12px;margin-top:8px;"><span class="lbl">Session Notes</span>');
   out.push('<textarea class="inp" rows="2" placeholder="How did it go?" onchange="updateSessNotes(' + q + blockId + q + ',' + q + sess.id + q + ',this.value)">' + (sess.notes||'') + '</textarea></div>');
-  // Complete button
+
   if (sess.status === 'completed') {
     out.push('<button class="btn btn-gh" style="width:100%;" onclick="markSessComplete(' + q + blockId + q + ',' + q + sess.id + q + ',false)">&#8617; Mark as Planned</button>');
   } else {
     out.push('<button style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:10px;cursor:pointer;font-family:inherit;" onclick="markSessComplete(' + q + blockId + q + ',' + q + sess.id + q + ',true)">&#10003; Mark Session Complete</button>');
   }
+
   return out.join('');
 }
 
@@ -3746,6 +3872,202 @@ function deleteMenoHistBlock(id) {
   saveDB(); renderMenoHistory(); toast('Deleted');
 }
 
+
+
+// ── MENOFIT LIBRARY ────────────────────────────────────────────────
+var MENO_LIB = {"Compound": ["Deadlift", "Back Squat", "Sumo Deadlift"], "Travelling (20m)": ["Sled Push", "Sled Pull", "Sled Push Pull", "Walking Lunges", "Crab Walk", "Side Step Squat", "Farmers Walk", "Bear Crawl", "Duck Walk", "Lateral Shuffle"], "Legs": ["Squat (BW)", "Sumo Squat (BW)", "Split Squat (BW)", "Bulgarian Split Squat (BW)", "Reverse Lunge (BW)", "Forward Lunge (BW)", "Lateral Lunge (BW)", "Curtsy Lunge (BW)", "Step Up (BW)", "Single Leg Step Down", "Glute Bridge (BW)", "Single Leg Glute Bridge", "Hip Thrust (BW)", "Donkey Kick", "Fire Hydrant", "Wall Sit", "Squat Pulse (BW)", "Sumo Squat Pulse (BW)", "Calf Raise (BW)", "Single Leg Calf Raise", "Good Morning (BW)", "Hip Hinge (BW)", "DB Goblet Squat", "DB Sumo Squat", "DB Romanian Deadlift", "DB Stiff Leg Deadlift", "DB Reverse Lunge", "DB Forward Lunge", "DB Lateral Lunge", "DB Curtsy Lunge", "DB Bulgarian Split Squat", "DB Step Up", "DB Glute Bridge", "DB Hip Thrust", "DB Single Leg RDL", "DB Squat Pulse", "KB Goblet Squat", "KB Sumo Deadlift", "KB Swing", "KB Single Leg RDL", "KB Lateral Lunge", "KB Reverse Lunge", "KB Step Up", "KB Hip Hinge", "KB Sumo Squat Pulse", "Plate Goblet Squat", "Plate Sumo Squat", "Plate Reverse Lunge", "Plate Step Up", "Plate Hip Thrust", "Plate Glute Bridge", "Step Up (Single Leg)", "Step Down (Eccentric)", "Lateral Step Up", "Step Up + Knee Drive", "Incline Squat (Heels Elevated)"], "Combination": ["Squat + Front Raise", "Squat + Bicep Curl", "Squat + Shoulder Press (Thruster)", "Squat + Lateral Raise", "Squat + Upright Row", "Squat + Arnold Press", "Sumo Squat + Upright Row", "Goblet Squat + Press", "Lunge + Bicep Curl", "Lunge + Shoulder Press", "Lunge + Lateral Raise", "Reverse Lunge + Front Raise", "Reverse Lunge + Bicep Curl", "Curtsy Lunge + Lateral Raise", "Lateral Lunge + Front Raise", "Step Up + Shoulder Press", "Step Up + Bicep Curl", "Step Up + Lateral Raise", "Deadlift + Row", "Deadlift + Bicep Curl", "RDL + Row", "Squat + Twist", "Lunge + Twist", "Squat Jump + Overhead Press", "Reverse Lunge + Overhead Reach"], "Upper Body": ["Press Up (Standard)", "Press Up (Wide)", "Press Up (Narrow/Tricep)", "Press Up (Incline)", "Press Up (Decline)", "Press Up (Knee)", "Tricep Dip", "Superman", "YTW (Floor)", "Reverse Snow Angel", "Prone Cobra", "Bear Hold", "DB Chest Press", "DB Incline Chest Press", "DB Chest Fly", "DB Bent Over Row", "DB Single Arm Row", "DB Shoulder Press", "DB Lateral Raise", "DB Front Raise", "DB Rear Delt Fly", "DB Bicep Curl", "DB Hammer Curl", "DB Concentration Curl", "DB Overhead Tricep Ext", "DB Tricep Kickback", "DB Skull Crusher", "DB Upright Row", "DB Arnold Press", "DB Renegade Row", "DB Bent Over Reverse Fly", "DB Shrug", "DB Pullover", "KB Press", "KB Single Arm Row", "KB Bicep Curl", "KB Shoulder Press", "KB Halo", "KB Around The World", "KB Bent Over Row", "KB Tricep Ext", "Cable Chest Fly", "Cable Chest Press", "Cable Row", "Cable Single Arm Row", "Cable Lateral Raise", "Cable Bicep Curl", "Cable Hammer Curl", "Cable Tricep Pushdown", "Cable Tricep Pushdown (Rope)", "Cable Overhead Tricep Ext", "Cable Face Pull", "Cable Rear Delt Fly", "Cable Upright Row", "Cable Straight Arm Pulldown", "Cable High to Low Fly", "Cable Low to High Fly", "Plate Front Raise", "Plate Lateral Raise", "Plate Press", "Plate Bent Over Row"], "Core (Standing)": ["Standing Oblique Crunch", "Standing Bicycle", "Standing Side Bend", "Standing Rotation", "Woodchop (High to Low)", "Woodchop (Low to High)", "Woodchop (Rotational)", "Standing Pallof Press", "Single Leg Balance Hold", "Standing Knee Drive", "Standing Side Crunch", "Standing Reach + Crunch", "Hip Circle", "Halo (KB/DB)", "Farmers Walk (Core Focus)"], "Core (Floor)": ["Plank (Standard)", "Plank (Side Left)", "Plank (Side Right)", "Plank + Shoulder Tap", "Plank + Hip Dip", "Plank + Leg Raise", "Dead Bug", "Bird Dog", "Bicycle Crunch", "Crunch", "Reverse Crunch", "Mountain Climber", "Russian Twist", "Toe Touch", "Leg Raise", "Flutter Kicks", "Hollow Body Hold", "V Sit", "V Sit Hold", "Heel Touch", "Glute Bridge (Core Focus)", "Single Leg Plank", "Bear Crawl Hold", "Ab Rollout (DB)", "Windscreen Wiper"], "Cardio": ["Rope Slam", "Ball Slam", "Ski Erg", "Rowing Machine"]};
+
+var menoLibCat = 'All';
+
+function renderMenoLibrary() {
+  var searchEl = document.getElementById('meno-lib-search');
+  var search = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  var catEl = document.getElementById('meno-lib-cats');
+  var listEl = document.getElementById('meno-lib-list');
+  if (!catEl || !listEl) return;
+
+  // Build category filter buttons
+  var cats = ['All'].concat(Object.keys(MENO_LIB));
+  var catHtml = '';
+  cats.forEach(function(c) {
+    var isAct = menoLibCat === c;
+    catHtml += '<button class="meno-cat-btn' + (isAct ? ' act' : '') + '" data-menocat="' + c + '">' + c + '</button>';
+  });
+  catEl.innerHTML = catHtml;
+  // Attach click handlers after rendering
+  catEl.querySelectorAll('[data-menocat]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      menoLibCat = this.dataset.menocat;
+      renderMenoLibrary();
+    });
+  });
+
+  // Build exercise list
+  var out = '';
+  var totalShown = 0;
+  Object.keys(MENO_LIB).forEach(function(cat) {
+    if (menoLibCat !== 'All' && menoLibCat !== cat) return;
+    var exercises = MENO_LIB[cat];
+    var filtered = search
+      ? exercises.filter(function(e) { return e.toLowerCase().indexOf(search) !== -1; })
+      : exercises;
+    if (!filtered.length) return;
+    totalShown += filtered.length;
+    var catId = 'mlb-' + cat.replace(/[^a-zA-Z0-9]/g, '');
+    out += '<div class="meno-cat-section">';
+    out += '<div class="meno-cat-hdr" data-target="' + catId + '">';
+    out += '<span class="meno-cat-title">' + cat + '</span>';
+    out += '<span class="meno-cat-count">' + filtered.length + '</span>';
+    out += '</div>';
+    out += '<div class="meno-cat-body" id="' + catId + '">';
+    filtered.forEach(function(ex) {
+      out += '<div class="meno-ex-item"><span class="meno-ex-name">' + ex + '</span>';
+      out += '<button class="meno-ex-add" data-exname="' + ex.replace(/"/g, '&quot;') + '">Copy</button>';
+      out += '</div>';
+    });
+    out += '</div></div>';
+  });
+
+  if (!out) {
+    out = '<div class="empty"><span class="empty-ico">&#128269;</span>No exercises found</div>';
+  }
+  listEl.innerHTML = out;
+
+  // Attach event listeners after render
+  listEl.querySelectorAll('[data-target]').forEach(function(hdr) {
+    hdr.addEventListener('click', function() {
+      var body = document.getElementById(this.dataset.target);
+      if (body) body.classList.toggle('collapsed');
+    });
+  });
+  listEl.querySelectorAll('[data-exname]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var name = this.dataset.exname;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(name).then(function() { toast(name + ' copied ✓'); });
+      } else {
+        toast(name + ' copied ✓');
+      }
+    });
+  });
+}
+
+function setMenoLibCat(cat) {
+  menoLibCat = cat;
+  renderMenoLibrary();
+}
+
+function toggleMenoCat(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('collapsed');
+}
+
+
+
+
+// ── MENOFIT EXERCISE PICKER ─────────────────────────────────────────
+var _menoPickerCtx = null; // {blockId, sessId, field, idx, filter}
+
+function openMenoPicker(blockId, sessId, field, idx, filter) {
+  _menoPickerCtx = { blockId: blockId, sessId: sessId, field: field, idx: idx, filter: filter || 'All' };
+  var titleEl = document.getElementById('meno-picker-title');
+  if (titleEl) titleEl.textContent = 'Select Exercise — ' + (filter || 'All');
+  var searchEl = document.getElementById('meno-picker-search');
+  if (searchEl) searchEl.value = '';
+  renderMenoPicker();
+  var modal = document.getElementById('meno-picker-modal');
+  var overlay = document.getElementById('meno-picker-overlay');
+  if (modal) { modal.style.display = 'flex'; }
+  if (overlay) overlay.style.display = 'block';
+}
+
+function closeMenoPicker() {
+  var modal = document.getElementById('meno-picker-modal');
+  var overlay = document.getElementById('meno-picker-overlay');
+  if (modal) modal.style.display = 'none';
+  if (overlay) overlay.style.display = 'none';
+  _menoPickerCtx = null;
+}
+
+function renderMenoPicker() {
+  var listEl = document.getElementById('meno-picker-list');
+  if (!listEl || !_menoPickerCtx) return;
+  var searchEl = document.getElementById('meno-picker-search');
+  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  var filter = _menoPickerCtx.filter || 'All';
+
+  // Decide which categories to show based on filter
+  var catMap = {
+    'Compound':    ['Compound'],
+    'Legs':        ['Compound','Travelling (20m)','Legs','Combination'],
+    'Upper Body':  ['Compound','Upper Body','Combination','Core (Standing)','Core (Floor)'],
+    'All':         Object.keys(MENO_LIB)
+  };
+  var showCats = catMap[filter] || Object.keys(MENO_LIB);
+
+  var out = '';
+  var total = 0;
+  showCats.forEach(function(cat) {
+    var exercises = MENO_LIB[cat];
+    if (!exercises) return;
+    var filtered = q ? exercises.filter(function(e) { return e.toLowerCase().indexOf(q) !== -1; }) : exercises;
+    if (!filtered.length) return;
+    total += filtered.length;
+    out += '<div class="meno-picker-cat-hdr">' + cat + '</div>';
+    filtered.forEach(function(ex) {
+      out += '<div class="meno-picker-item" data-exname="' + ex.replace(/"/g,'&quot;') + '">' + ex + '<span style="color:var(--meno-purple);font-size:18px">&#43;</span></div>';
+    });
+  });
+
+  if (!out) out = '<div class="empty" style="padding:30px 0"><span class="empty-ico">&#128269;</span>No exercises found</div>';
+  listEl.innerHTML = out;
+
+  // Attach click handlers
+  listEl.querySelectorAll('[data-exname]').forEach(function(item) {
+    item.addEventListener('click', function() {
+      selectMenoExercise(this.dataset.exname);
+    });
+  });
+}
+
+function selectMenoExercise(name) {
+  if (!_menoPickerCtx) return;
+  var ctx = _menoPickerCtx;
+  var s = getMenoSess(ctx.blockId, ctx.sessId);
+  if (!s) { closeMenoPicker(); return; }
+
+  if (ctx.field === 'compound') {
+    s.compound = name;
+  } else if (ctx.idx === -1) {
+    // Adding to finisher array
+    if (!s[ctx.field]) s[ctx.field] = [];
+    s[ctx.field].push(name);
+  } else {
+    if (!s[ctx.field]) s[ctx.field] = ['','','',''];
+    s[ctx.field][ctx.idx] = name;
+  }
+  saveDB();
+  closeMenoPicker();
+  renderMenoActive();
+}
+
+function clearMenoSlot(event, blockId, sessId, field, idx) {
+  event.stopPropagation();
+  var s = getMenoSess(blockId, sessId);
+  if (!s) return;
+  if (field === 'compound') s.compound = '';
+  else if (s[field]) s[field][idx] = '';
+  saveDB();
+  renderMenoActive();
+}
+
+function removeMenoFinisherEx(blockId, sessId, field, idx) {
+  var s = getMenoSess(blockId, sessId);
+  if (!s || !s[field]) return;
+  s[field].splice(idx, 1);
+  saveDB();
+  renderMenoActive();
+}
 
 </script>
 </body>

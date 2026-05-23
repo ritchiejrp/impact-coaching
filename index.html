@@ -2175,9 +2175,9 @@ function renderProfile(clientId) {
       + '<div style="text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--yellow);">'+(latestTDEE.fat||'—')+'g</div><div style="font-size:9px;color:var(--t3);font-family:monospace;">Fat</div></div>'
       + '</div></div>';
     // Insert after stats row and before session history toggle
-    h = h.replace('<!-- TDEE_PLACEHOLDER -->', tdeeHtml + buildFreqGraph(sessions) + buildWeightGraph(c.statsLog || []));
+    h = h.replace('<!-- TDEE_PLACEHOLDER -->', tdeeHtml + buildWeightGraph(c.statsLog || []));
   } else {
-    h = h.replace('<!-- TDEE_PLACEHOLDER -->', buildFreqGraph(sessions) + buildWeightGraph(c.statsLog || []));
+    h = h.replace('<!-- TDEE_PLACEHOLDER -->', buildWeightGraph(c.statsLog || []));
   }
   // Set everything at once — single DOM write, no surgery
   contentEl.innerHTML = h;
@@ -4330,35 +4330,7 @@ function _wireAttendanceModal() {
   }
 }
 
-function buildFreqGraph(sessions) {
-  // Build last 12 weeks session count
-  var weeks = [];
-  for (var i = 11; i >= 0; i--) {
-    var d = new Date();
-    d.setDate(d.getDate() - (i * 7));
-    var wk = wkLabel(d.toISOString().slice(0,10));
-    weeks.push({ label: wk, count: 0 });
-  }
-  sessions.forEach(function(s) {
-    var wk = s.week || wkLabel(s.date);
-    var found = weeks.find(function(w){ return w.label === wk; });
-    if (found) found.count++;
-  });
-  var max = Math.max.apply(null, weeks.map(function(w){ return w.count; })) || 1;
-  var w = 100 / weeks.length;
-  var bars = weeks.map(function(wk) {
-    var h = wk.count ? Math.max(20, Math.round(wk.count / max * 100)) : 4;
-    var col = wk.count >= 2 ? 'var(--green)' : wk.count === 1 ? 'var(--blue)' : 'var(--bg3)';
-    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">'
-      + '<div style="width:70%;height:' + h + 'px;background:' + col + ';border-radius:3px 3px 0 0;min-height:3px;"></div>'
-      + '<div style="font-size:8px;color:var(--t4);font-family:monospace;">' + (wk.count||'') + '</div>'
-      + '</div>';
-  }).join('');
-  return '<div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;">'
-    + '<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:monospace;margin-bottom:10px;">Session Frequency — Last 12 Weeks</div>'
-    + '<div style="display:flex;align-items:flex-end;height:60px;gap:2px;">' + bars + '</div>'
-    + '</div>';
-}
+
 
 function buildWeightGraph(statsLog) {
   if (!statsLog || statsLog.length < 2) return '';

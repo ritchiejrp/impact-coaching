@@ -2102,6 +2102,8 @@ function renderProfile(clientId) {
   h += '</div></div>';
 
   // Session history
+  h += '<!-- TDEE_PLACEHOLDER -->';
+
   var histView = (window._histView && window._histView[clientId]) || "week";
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:10px;">';
   h += '<div class="prof-sec" style="margin:0;border:none;padding:0">Session History</div>';

@@ -3660,121 +3660,131 @@ function renderMenoActive() {
     out.push('<button class="btn-finish-block" onclick="finishMenoBlockEarly()" style="background:var(--bg3);color:var(--t3);border:1.5px solid var(--bd);">Archive Early (' + done + '/6 done)</button>');
   }
   el.innerHTML = out.join('');
+  // Wire up all data-action handlers via event delegation
+  el.addEventListener('click', function(ev) {
+    var t = ev.target;
+    // Walk up to find data-action element
+    var el2 = t;
+    while (el2 && el2 !== this && !el2.dataset.action) el2 = el2.parentElement;
+    if (!el2 || !el2.dataset.action) return;
+    var action = el2.dataset.action;
+    var bid2 = el2.dataset.bid, sid2 = el2.dataset.sid;
+    if (action === 'pick') {
+      ev.stopPropagation();
+      openMenoPicker(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx), el2.dataset.cat);
+    } else if (action === 'clear') {
+      ev.stopPropagation();
+      clearMenoSlot(ev, bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
+    } else if (action === 'remove') {
+      removeMenoFinisherEx(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
+    } else if (action === 'complete') {
+      markSessComplete(bid2, sid2, el2.dataset.complete === 'true');
+    }
+  }, true);
+  el.addEventListener('change', function(ev) {
+    var t = ev.target;
+    if (t.dataset.action === 'date') updateSessDate(t.dataset.bid, t.dataset.sid, t.value);
+    if (t.dataset.action === 'notes') updateSessNotes(t.dataset.bid, t.dataset.sid, t.value);
+  });
 }
 
 function buildSessEditor(blockId, sess) {
-  var q = '"';
   var out = [];
+  var bid = blockId, sid = sess.id;
 
-  // Date
+  function slotBtn(field, idx, filterCat) {
+    var arrVal = (field === 'compound') ? (sess.compound || '')
+      : (sess[field] && sess[field][idx] != null) ? sess[field][idx] : '';
+    var filled = arrVal !== '';
+    var label  = filled ? arrVal : ('Exercise ' + (idx + 1) + '...');
+    var h = '<button class="meno-slot-btn' + (filled ? ' filled' : '') + '" style="margin-bottom:6px;width:100%;"'
+      + ' data-bid="' + bid + '" data-sid="' + sid + '" data-field="' + field + '" data-idx="' + idx + '" data-cat="' + filterCat + '" data-action="pick">';
+    h += '<span>' + label + '</span>';
+    if (filled) h += '<span class="slot-clear" data-bid="' + bid + '" data-sid="' + sid + '" data-field="' + field + '" data-idx="' + idx + '" data-action="clear">&#215;</span>';
+    h += '</button>';
+    return h;
+  }
+
+  // Date - use data attribute, event wired after render
   out.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-top:8px;">');
   out.push('<span class="lbl" style="margin:0;flex-shrink:0;">Session Date</span>');
-  out.push('<input class="inp" type="date" value="' + sess.date + '" style="font-family:monospace;flex:1;" onchange="updateSessDate(' + q + blockId + q + ',' + q + sess.id + q + ',this.value)"></div>');
+  out.push('<input class="inp" type="date" value="' + sess.date + '" style="font-family:monospace;flex:1;" data-bid="' + bid + '" data-sid="' + sid + '" data-action="date"></div>');
 
-  // ── WARM UP (fixed label) ───────────────────────────────────────
-  out.push('<div class="meno-fixed-section" style="border-color:var(--green);color:var(--green);">');
-  out.push('&#128293; <b>Warm Up</b></div>');
+  // Warm Up
+  out.push('<div class="meno-fixed-section" style="border-color:var(--green);color:var(--green);">&#128293; <b>Warm Up</b></div>');
 
-  // ── COMPOUND (single exercise picker) ──────────────────────────
+  // Compound
   out.push('<div class="meno-section-card" style="border-color:var(--meno-orange)44;">');
   out.push('<div class="meno-section-label" style="color:var(--meno-orange)">&#127947; Compound (Group)</div>');
-  var comp = sess.compound || '';
-  out.push('<button class="meno-slot-btn' + (comp ? ' filled' : '') + '" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;compound&quot;,0,&quot;Compound&quot;)">');
-  out.push('<span>' + (comp || 'Tap to select exercise...') + '</span>');
-  if (comp) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;compound&quot;,0)">&#215;</span>');
-  out.push('</button></div>');
+  out.push(slotBtn('compound', 0, 'Compound'));
+  out.push('</div>');
 
-  // ── LEGS 1 ──────────────────────────────────────────────────────
+  // Legs 1
   out.push('<div class="meno-section-card">');
   out.push('<div class="meno-section-label" style="color:var(--meno-purple)">&#129463; Legs 1 <span style="font-weight:400;color:var(--t3);">(Group 1 rotates)</span></div>');
-  for (var i = 0; i < 4; i++) {
-    var val = (sess.legs1 && sess.legs1[i]) || '';
-    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs1&quot;,' + i + ',&quot;Legs&quot;)">');
-    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
-    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs1&quot;,' + i + ')">&#215;</span>');
-    out.push('</button>');
-  }
+  for (var i = 0; i < 4; i++) out.push(slotBtn('legs1', i, 'Legs'));
   out.push('</div>');
 
-  // ── LEGS 2 ──────────────────────────────────────────────────────
+  // Legs 2
   out.push('<div class="meno-section-card">');
   out.push('<div class="meno-section-label" style="color:var(--meno-pink)">&#129463; Legs 2 <span style="font-weight:400;color:var(--t3);">(Group 2 rotates)</span></div>');
-  for (var i = 0; i < 4; i++) {
-    var val = (sess.legs2 && sess.legs2[i]) || '';
-    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs2&quot;,' + i + ',&quot;Legs&quot;)">');
-    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
-    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legs2&quot;,' + i + ')">&#215;</span>');
-    out.push('</button>');
-  }
+  for (var i = 0; i < 4; i++) out.push(slotBtn('legs2', i, 'Legs'));
   out.push('</div>');
 
-  // ── LEGS FINISHER (optional) ────────────────────────────────────
+  // Legs Finisher
   out.push('<div class="meno-section-card" style="border-color:var(--meno-purple)33;">');
   out.push('<div class="meno-section-label" style="color:var(--meno-purple)">&#127937; Legs Finisher <span style="font-weight:400;color:var(--t4);font-size:10px;">OPTIONAL</span></div>');
   var lf = sess.legsFinisher || [];
-  lf.forEach(function(ex, i) {
+  for (var i = 0; i < lf.length; i++) {
     out.push('<div style="display:flex;gap:6px;margin-bottom:6px;">');
-    out.push('<button class="meno-slot-btn filled" style="flex:1;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,' + i + ',&quot;Legs&quot;)"><span>' + ex + '</span></button>');
-    out.push('<button onclick="removeMenoFinisherEx(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,' + i + ')" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
+    out.push('<button class="meno-slot-btn filled" style="flex:1;" data-bid="' + bid + '" data-sid="' + sid + '" data-field="legsFinisher" data-idx="' + i + '" data-cat="Legs" data-action="pick"><span>' + lf[i] + '</span></button>');
+    out.push('<button data-bid="' + bid + '" data-sid="' + sid + '" data-field="legsFinisher" data-idx="' + i + '" data-action="remove" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
     out.push('</div>');
-  });
-  out.push('<button class="meno-finisher-add" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;legsFinisher&quot;,-1,&quot;Legs&quot;)">+ Add Exercise</button>');
+  }
+  out.push('<button class="meno-finisher-add" data-bid="' + bid + '" data-sid="' + sid + '" data-field="legsFinisher" data-idx="-1" data-cat="Legs" data-action="pick">+ Add Exercise</button>');
   out.push('</div>');
 
-  // ── BREAK ────────────────────────────────────────────────────────
+  // Break
   out.push('<div class="meno-divider">&#9679; Break / Rest / Reset &#9679;</div>');
 
-  // ── UPPER BODY 1 ─────────────────────────────────────────────────
+  // Upper Body 1
   out.push('<div class="meno-section-card">');
   out.push('<div class="meno-section-label" style="color:var(--blue)">&#128170; Upper Body 1 <span style="font-weight:400;color:var(--t3);">(Group 1 rotates)</span></div>');
-  for (var i = 0; i < 4; i++) {
-    var val = (sess.upperBody1 && sess.upperBody1[i]) || '';
-    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody1&quot;,' + i + ',&quot;Upper Body&quot;)">');
-    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
-    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody1&quot;,' + i + ')">&#215;</span>');
-    out.push('</button>');
-  }
+  for (var i = 0; i < 4; i++) out.push(slotBtn('upperBody1', i, 'Upper Body'));
   out.push('</div>');
 
-  // ── UPPER BODY 2 ─────────────────────────────────────────────────
+  // Upper Body 2
   out.push('<div class="meno-section-card">');
   out.push('<div class="meno-section-label" style="color:var(--teal)">&#128170; Upper Body 2 <span style="font-weight:400;color:var(--t3);">(Group 2 rotates)</span></div>');
-  for (var i = 0; i < 4; i++) {
-    var val = (sess.upperBody2 && sess.upperBody2[i]) || '';
-    out.push('<button class="meno-slot-btn' + (val ? ' filled' : '') + '" style="margin-bottom:6px;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody2&quot;,' + i + ',&quot;Upper Body&quot;)">');
-    out.push('<span>' + (val || 'Exercise ' + (i+1) + '...') + '</span>');
-    if (val) out.push('<span class="slot-clear" onclick="clearMenoSlot(event,' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperBody2&quot;,' + i + ')">&#215;</span>');
-    out.push('</button>');
-  }
+  for (var i = 0; i < 4; i++) out.push(slotBtn('upperBody2', i, 'Upper Body'));
   out.push('</div>');
 
-  // ── UPPER FINISHER (optional) ────────────────────────────────────
+  // Upper Finisher
   out.push('<div class="meno-section-card" style="border-color:var(--teal)33;">');
   out.push('<div class="meno-section-label" style="color:var(--teal)">&#127937; Upper Body Finisher <span style="font-weight:400;color:var(--t4);font-size:10px;">OPTIONAL</span></div>');
   var uf = sess.upperFinisher || [];
-  uf.forEach(function(ex, i) {
+  for (var i = 0; i < uf.length; i++) {
     out.push('<div style="display:flex;gap:6px;margin-bottom:6px;">');
-    out.push('<button class="meno-slot-btn filled" style="flex:1;" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,' + i + ',&quot;Upper Body&quot;)"><span>' + ex + '</span></button>');
-    out.push('<button onclick="removeMenoFinisherEx(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,' + i + ')" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
+    out.push('<button class="meno-slot-btn filled" style="flex:1;" data-bid="' + bid + '" data-sid="' + sid + '" data-field="upperFinisher" data-idx="' + i + '" data-cat="Upper Body" data-action="pick"><span>' + uf[i] + '</span></button>');
+    out.push('<button data-bid="' + bid + '" data-sid="' + sid + '" data-field="upperFinisher" data-idx="' + i + '" data-action="remove" style="background:none;border:1.5px solid var(--bd);color:var(--t4);border-radius:8px;padding:0 10px;cursor:pointer;flex-shrink:0;">&#215;</button>');
     out.push('</div>');
-  });
-  out.push('<button class="meno-finisher-add" onclick="openMenoPicker(' + q + blockId + q + ',' + q + sess.id + q + ',&quot;upperFinisher&quot;,-1,&quot;Upper Body&quot;)">+ Add Exercise</button>');
+  }
+  out.push('<button class="meno-finisher-add" data-bid="' + bid + '" data-sid="' + sid + '" data-field="upperFinisher" data-idx="-1" data-cat="Upper Body" data-action="pick">+ Add Exercise</button>');
   out.push('</div>');
 
-  // ── COOL DOWN (fixed label) ─────────────────────────────────────
-  out.push('<div class="meno-fixed-section" style="border-color:var(--teal);color:var(--teal);">');
-  out.push('&#129510; <b>Cool Down &amp; Stretches</b></div>');
+  // Cool Down
+  out.push('<div class="meno-fixed-section" style="border-color:var(--teal);color:var(--teal);">&#129510; <b>Cool Down &amp; Stretches</b></div>');
 
-  // ── NOTES + COMPLETE ────────────────────────────────────────────
+  // Notes
   out.push('<div style="margin-bottom:12px;margin-top:8px;"><span class="lbl">Session Notes</span>');
-  out.push('<textarea class="inp" rows="2" placeholder="How did it go?" onchange="updateSessNotes(' + q + blockId + q + ',' + q + sess.id + q + ',this.value)">' + (sess.notes||'') + '</textarea></div>');
+  out.push('<textarea class="inp" rows="2" placeholder="How did it go?" data-bid="' + bid + '" data-sid="' + sid + '" data-action="notes">' + (sess.notes||'') + '</textarea></div>');
 
+  // Complete button
   if (sess.status === 'completed') {
-    out.push('<button class="btn btn-gh" style="width:100%;" onclick="markSessComplete(' + q + blockId + q + ',' + q + sess.id + q + ',false)">&#8617; Mark as Planned</button>');
+    out.push('<button class="btn btn-gh" style="width:100%;" data-bid="' + bid + '" data-sid="' + sid + '" data-complete="false" data-action="complete">&#8617; Mark as Planned</button>');
   } else {
-    out.push('<button style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:10px;cursor:pointer;font-family:inherit;" onclick="markSessComplete(' + q + blockId + q + ',' + q + sess.id + q + ',true)">&#10003; Mark Session Complete</button>');
+    out.push('<button style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:10px;cursor:pointer;font-family:inherit;" data-bid="' + bid + '" data-sid="' + sid + '" data-complete="true" data-action="complete">&#10003; Mark Session Complete</button>');
   }
-
   return out.join('');
 }
 
@@ -3864,6 +3874,32 @@ function renderMenoHistory() {
     out.push('</div>');
   });
   el.innerHTML = out.join('');
+  // Wire up all data-action handlers via event delegation
+  el.addEventListener('click', function(ev) {
+    var t = ev.target;
+    // Walk up to find data-action element
+    var el2 = t;
+    while (el2 && el2 !== this && !el2.dataset.action) el2 = el2.parentElement;
+    if (!el2 || !el2.dataset.action) return;
+    var action = el2.dataset.action;
+    var bid2 = el2.dataset.bid, sid2 = el2.dataset.sid;
+    if (action === 'pick') {
+      ev.stopPropagation();
+      openMenoPicker(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx), el2.dataset.cat);
+    } else if (action === 'clear') {
+      ev.stopPropagation();
+      clearMenoSlot(ev, bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
+    } else if (action === 'remove') {
+      removeMenoFinisherEx(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
+    } else if (action === 'complete') {
+      markSessComplete(bid2, sid2, el2.dataset.complete === 'true');
+    }
+  }, true);
+  el.addEventListener('change', function(ev) {
+    var t = ev.target;
+    if (t.dataset.action === 'date') updateSessDate(t.dataset.bid, t.dataset.sid, t.value);
+    if (t.dataset.action === 'notes') updateSessNotes(t.dataset.bid, t.dataset.sid, t.value);
+  });
 }
 
 function deleteMenoHistBlock(id) {
@@ -4052,7 +4088,7 @@ function selectMenoExercise(name) {
 }
 
 function clearMenoSlot(event, blockId, sessId, field, idx) {
-  event.stopPropagation();
+  if (event && event.stopPropagation) event.stopPropagation();
   var s = getMenoSess(blockId, sessId);
   if (!s) return;
   if (field === 'compound') s.compound = '';

@@ -506,6 +506,12 @@ textarea.inp{resize:vertical;line-height:1.5;}
   color:var(--meno-pink); border-radius:8px; padding:9px; width:100%;
   font-family:inherit; font-size:13px; cursor:pointer; margin-top:6px; }
 
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
 </style>
 
 <script>
@@ -628,8 +634,10 @@ if ('serviceWorker' in navigator) {
     <button class="back-btn" id="rec-back-btn">&#8249; Back</button>
     <div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:16px;" id="rec-header"></div>
     <div id="rec-slots"></div>
-    <div style="margin-top:14px;"><span class="lbl">Session Notes</span>
-      <textarea class="inp" id="rec-notes" rows="2" placeholder="How did it go?"></textarea></div>
+    <div style="margin-top:14px;"><span class="lbl">Session Notes (Your notes)</span>
+      <textarea class="inp" id="rec-notes" rows="2" placeholder="How did it go? Any PT observations..."></textarea></div>
+    <div style="margin-top:10px;"><span class="lbl">Client Feedback</span>
+      <textarea class="inp" id="rec-client-notes" rows="2" placeholder="How did the client feel? Any feedback..."></textarea></div>
     <button class="btn btn-g btn-blk" style="margin-top:16px;font-size:16px;padding:16px;font-family:inherit;" onclick="saveRecord()">&#9989; Mark Complete &amp; Save Actuals</button>
   </div>
 
@@ -1073,7 +1081,7 @@ if ('serviceWorker' in navigator) {
 <div id="meno-picker-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;max-height:80vh;background:var(--bg);border-radius:16px 16px 0 0;z-index:2001;overflow:hidden;flex-direction:column;">
   <div style="padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
     <div style="font-size:16px;font-weight:700;" id="meno-picker-title">Select Exercise</div>
-    <button onclick="closeMenoPicker()" style="background:none;border:none;color:var(--t3);font-size:22px;cursor:pointer;">×</button>
+    <button onclick="closeMenoPicker()" style="background:none;border:none;color:var(--t3);font-size:22px;cursor:pointer;">&#215;</button>
   </div>
   <div style="padding:10px 16px;border-bottom:1px solid var(--bd);">
     <input class="inp" id="meno-picker-search" type="search" placeholder="Search exercises..."
@@ -1971,6 +1979,7 @@ function renderProfile(clientId) {
   wkStart.setDate(now.getDate() - now.getDay()); wkStart.setHours(0, 0, 0, 0);
   var thisWeek  = sessions.filter(function(s) { return new Date(s.date) >= wkStart; }).length;
   var lastDate  = sessions[0] ? sessions[0].date : null;
+  var latestTDEE = (c.tdeeHistory && c.tdeeHistory.length) ? c.tdeeHistory[0] : null;
   var credits   = c.credits || 0;
   var creditColor = credits > 3 ? "var(--green)" : credits > 0 ? "var(--yellow)" : credits === 0 ? "var(--orange)" : "var(--red)";
   var creditMsg   = credits < 0 ? " (overdue)" : credits === 0 ? " — time to re-purchase!" : "";
@@ -2151,6 +2160,23 @@ function renderProfile(clientId) {
     });
   }
 
+  // Add TDEE card if available
+  if (latestTDEE) {
+    var tdeeHtml = '<div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+      + '<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:monospace;">Latest TDEE</div>'
+      + '<div style="font-size:10px;color:var(--t4);font-family:monospace;">' + latestTDEE.date + '</div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">'
+      + '<div style="text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--red);">'+(latestTDEE.tdee||'—')+'</div><div style="font-size:9px;color:var(--t3);font-family:monospace;">TDEE</div></div>'
+      + '<div style="text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--blue);">'+(latestTDEE.protein||'—')+'g</div><div style="font-size:9px;color:var(--t3);font-family:monospace;">Protein</div></div>'
+      + '<div style="text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--orange);">'+(latestTDEE.carbs||'—')+'g</div><div style="font-size:9px;color:var(--t3);font-family:monospace;">Carbs</div></div>'
+      + '<div style="text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--yellow);">'+(latestTDEE.fat||'—')+'g</div><div style="font-size:9px;color:var(--t3);font-family:monospace;">Fat</div></div>'
+      + '</div></div>';
+    // Insert after stats row and before session history toggle
+    h = h.replace('<!-- TDEE_PLACEHOLDER -->', tdeeHtml + buildFreqGraph(sessions) + buildWeightGraph(c.statsLog || []));
+  } else {
+    h = h.replace('<!-- TDEE_PLACEHOLDER -->', buildFreqGraph(sessions) + buildWeightGraph(c.statsLog || []));
+  }
   // Set everything at once — single DOM write, no surgery
   contentEl.innerHTML = h;
 }
@@ -2544,6 +2570,7 @@ function renderHistory() {
               ${!isCompleted?`<button class="btn btn-b" onclick="editSession('${s.id}')">✏️ Edit</button>`:""}
               <button class="btn btn-b" onclick="reshareSession('${s.id}')">📋 Share</button>
               <button class="btn btn-gh" onclick="reuseSession('${s.id}')">🔁 Reuse</button>
+              <button class="btn btn-gh" onclick="duplicateSession('${s.id}')">📑 Dup</button>
               <button class="btn btn-gh" style="color:var(--red)" onclick="deleteSession('${s.id}')">🗑</button>
             </div>
           </div>
@@ -2936,7 +2963,8 @@ function renderRecord(sessionId) {
       ${partner?`<div class="rec-cli-tag"><span class="rec-cli-dot" style="background:${partner.color}"></span>${partner.name}</div>`:""}
     </div>`;
 
-  document.getElementById("rec-notes").value = s.notes||"";
+  document.getElementById("rec-notes").value   = s.notes||"";
+  document.getElementById("rec-client-notes").value = s.clientNotes||"";
 
   document.getElementById("rec-slots").innerHTML = (s.rows||[]).map(row=>{
     const isCardio = row.slot==="cardio";
@@ -2995,7 +3023,9 @@ function saveRecord() {
     if (a)  row.actual  = a.value.trim();
     if (ab) row.actualB = ab.value.trim();
   });
-  s.notes = document.getElementById("rec-notes").value;
+  s.notes        = document.getElementById("rec-notes").value;
+  s.clientNotes  = document.getElementById("rec-client-notes").value;
+  s.updatedAt    = new Date().toISOString();
   var wasPlanned = s.status !== "completed";
   s.status = "completed";
   if (wasPlanned) {
@@ -3133,9 +3163,11 @@ function renderClientsList() {
     const thisWeek=sessions.filter(s=>new Date(s.date)>=wkStart).length;
     const credits=c.credits||0;
     const creditColor=credits>3?"var(--green)":credits>0?"var(--yellow)":credits===0?"var(--orange)":"var(--red)";
-    const creditWarn=credits<=0
-      ?`<span class="dc-pill" style="background:#1a0000;color:var(--red);border:1px solid #3a0000">⚠️ ${credits===0?"No sessions":credits+" overdue"}</span>`
-      :`<span class="dc-pill" style="background:${creditColor}22;color:${creditColor};border:1px solid ${creditColor}44">${credits} left</span>`;
+    const creditWarn = credits <= 0
+      ? `<span class="dc-pill" style="background:#1a0000;color:var(--red);border:1px solid #3a0000;animation:pulse 1.5s infinite;">⚠️ ${credits===0?"No sessions":credits+" overdue"}</span>`
+      : credits <= 2
+        ? `<span class="dc-pill" style="background:#1a0800;color:var(--orange);border:1px solid var(--orange)66;">🔔 ${credits} left — renew soon</span>`
+        : `<span class="dc-pill" style="background:${creditColor}22;color:${creditColor};border:1px solid ${creditColor}44;">${credits} left</span>`;
     return `<div class="dc-card" onclick="viewProfile('${c.id}','clients')">
       <div class="dc-banner" style="background:linear-gradient(90deg,${c.color},${c.color}88,transparent)"></div>
       <div class="dc-inner">
@@ -3734,6 +3766,8 @@ function renderMenoActive() {
       removeMenoFinisherEx(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
     } else if (action === 'complete') {
       markSessComplete(bid2, sid2, el2.dataset.complete === 'true');
+    } else if (action === 'attend') {
+      showAttendanceModal(bid2, sid2);
     }
   }, true);
   el.addEventListener('change', function(ev) {
@@ -3838,7 +3872,7 @@ function buildSessEditor(blockId, sess) {
   if (sess.status === 'completed') {
     out.push('<button class="btn btn-gh" style="width:100%;" data-bid="' + bid + '" data-sid="' + sid + '" data-complete="false" data-action="complete">&#8617; Mark as Planned</button>');
   } else {
-    out.push('<button style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:10px;cursor:pointer;font-family:inherit;" data-bid="' + bid + '" data-sid="' + sid + '" data-complete="true" data-action="complete">&#10003; Mark Session Complete</button>');
+    out.push('<button style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:10px;cursor:pointer;font-family:inherit;" data-bid="' + bid + '" data-sid="' + sid + '" data-action="attend">&#10003; Mark Session Complete</button>');
   }
   return out.join('');
 }
@@ -3956,6 +3990,8 @@ function renderMenoHistory() {
       removeMenoFinisherEx(bid2, sid2, el2.dataset.field, parseInt(el2.dataset.idx));
     } else if (action === 'complete') {
       markSessComplete(bid2, sid2, el2.dataset.complete === 'true');
+    } else if (action === 'attend') {
+      showAttendanceModal(bid2, sid2);
     }
   }, true);
   el.addEventListener('change', function(ev) {
@@ -4198,15 +4234,7 @@ function selectMenoExercise(name) {
   renderMenoActive();
 }
 
-function clearMenoSlot(event, blockId, sessId, field, idx) {
-  if (event && event.stopPropagation) event.stopPropagation();
-  var s = getMenoSess(blockId, sessId);
-  if (!s) return;
-  if (field === 'compound') s.compound = '';
-  else if (s[field]) s[field][idx] = '';
-  saveDB();
-  renderMenoActive();
-}
+
 
 function removeMenoFinisherEx(blockId, sessId, field, idx) {
   var s = getMenoSess(blockId, sessId);
@@ -4215,6 +4243,175 @@ function removeMenoFinisherEx(blockId, sessId, field, idx) {
   saveDB();
   renderMenoActive();
 }
+
+
+function duplicateSession(sessionId) {
+  var orig = DB.sessions.find(function(s) { return s.id === sessionId; });
+  if (!orig) return;
+  var newSess = JSON.parse(JSON.stringify(orig)); // deep clone
+  newSess.id       = uid();
+  newSess.date     = todayStr();
+  newSess.status   = 'planned';
+  newSess.week     = wkLabel(newSess.date);
+  newSess.name     = (orig.name || 'Session') + ' (copy)';
+  newSess.updatedAt = new Date().toISOString();
+  // Clear actuals — keep targets/exercises
+  (newSess.rows || []).forEach(function(r) { r.actual = ''; r.actualB = ''; });
+  DB.sessions.unshift(newSess);
+  saveDB();
+  renderDashboard();
+  if (currentPage === 'history') renderHistory();
+  if (currentPage === 'profile' && profileClientId) renderProfile(profileClientId);
+  toast('Session duplicated ✓');
+}
+
+function showAttendanceModal(blockId, sessId) {
+  var mb = DB.menofit && DB.menofit.activeBlock;
+  if (!mb) return;
+  var s = mb.sessions.find(function(x){ return x.id === sessId; });
+  if (!s) return;
+  var n = mb.numClients || 1;
+  var existing = s.attendance || [];
+
+  var checks = '';
+  for (var i = 0; i < n; i++) {
+    var checked = existing[i] !== false; // default true
+    checks += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);">';
+    checks += '<input type="checkbox" id="att-'+i+'" ' + (checked ? 'checked' : '') + ' style="width:20px;height:20px;accent-color:var(--meno-pink);">';
+    checks += '<label for="att-'+i+'" style="font-size:15px;cursor:pointer;">Participant ' + (i+1) + '</label>';
+    checks += '</div>';
+  }
+
+  var modal = document.createElement('div');
+  modal.id = 'meno-att-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:3000;display:flex;align-items:flex-end;';
+  modal.innerHTML = '<div style="background:var(--bg);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;">'
+    + '<div style="font-size:17px;font-weight:800;margin-bottom:4px;">Week ' + s.week + ' Attendance</div>'
+    + '<div style="font-size:12px;color:var(--t3);margin-bottom:16px;">Tick who attended</div>'
+    + checks
+    + '<button id="meno-att-confirm" data-bid="' + blockId + '" data-sid="' + sessId + '" style="width:100%;background:var(--meno-grad);border:none;color:#fff;font-weight:800;font-size:16px;padding:16px;border-radius:12px;cursor:pointer;font-family:inherit;margin-top:16px;">&#10003; Confirm &amp; Complete</button>'
+    + '<button id="meno-att-cancel" style="width:100%;background:none;border:none;color:var(--t3);padding:12px;cursor:pointer;font-family:inherit;font-size:14px;">Cancel</button>'
+    + '</div>';
+  document.body.appendChild(modal);
+  _wireAttendanceModal();
+}
+
+function saveAttendance(blockId, sessId) {
+  var mb = DB.menofit && DB.menofit.activeBlock;
+  if (!mb) return;
+  var s = mb.sessions.find(function(x){ return x.id === sessId; });
+  if (!s) return;
+  var n = mb.numClients || 1;
+  s.attendance = [];
+  for (var i = 0; i < n; i++) {
+    var cb = document.getElementById('att-'+i);
+    s.attendance.push(cb ? cb.checked : true);
+  }
+  var modal = document.getElementById('meno-att-modal');
+  if (modal) modal.remove();
+  markSessComplete(blockId, sessId, true);
+}
+
+function _wireAttendanceModal() {
+  var confirmBtn = document.getElementById('meno-att-confirm');
+  var cancelBtn  = document.getElementById('meno-att-cancel');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', function() {
+      saveAttendance(this.dataset.bid, this.dataset.sid);
+    });
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function() {
+      var modal = document.getElementById('meno-att-modal');
+      if (modal) modal.remove();
+    });
+  }
+}
+
+function buildFreqGraph(sessions) {
+  // Build last 12 weeks session count
+  var weeks = [];
+  for (var i = 11; i >= 0; i--) {
+    var d = new Date();
+    d.setDate(d.getDate() - (i * 7));
+    var wk = wkLabel(d.toISOString().slice(0,10));
+    weeks.push({ label: wk, count: 0 });
+  }
+  sessions.forEach(function(s) {
+    var wk = s.week || wkLabel(s.date);
+    var found = weeks.find(function(w){ return w.label === wk; });
+    if (found) found.count++;
+  });
+  var max = Math.max.apply(null, weeks.map(function(w){ return w.count; })) || 1;
+  var w = 100 / weeks.length;
+  var bars = weeks.map(function(wk) {
+    var h = wk.count ? Math.max(20, Math.round(wk.count / max * 100)) : 4;
+    var col = wk.count >= 2 ? 'var(--green)' : wk.count === 1 ? 'var(--blue)' : 'var(--bg3)';
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">'
+      + '<div style="width:70%;height:' + h + 'px;background:' + col + ';border-radius:3px 3px 0 0;min-height:3px;"></div>'
+      + '<div style="font-size:8px;color:var(--t4);font-family:monospace;">' + (wk.count||'') + '</div>'
+      + '</div>';
+  }).join('');
+  return '<div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;">'
+    + '<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:monospace;margin-bottom:10px;">Session Frequency — Last 12 Weeks</div>'
+    + '<div style="display:flex;align-items:flex-end;height:60px;gap:2px;">' + bars + '</div>'
+    + '</div>';
+}
+
+function buildWeightGraph(statsLog) {
+  if (!statsLog || statsLog.length < 2) return '';
+  // Extract weight entries
+  var entries = [];
+  statsLog.forEach(function(e) {
+    var m = e.notes.match(/(?:weight|wt|bw)[:\s]+(\d+\.?\d*)\s*kg/i);
+    if (m) entries.push({ date: e.date, kg: parseFloat(m[1]) });
+  });
+  if (entries.length < 2) return '';
+  entries.sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var last8 = entries.slice(-8);
+  var min = Math.min.apply(null, last8.map(function(e){ return e.kg; }));
+  var max = Math.max.apply(null, last8.map(function(e){ return e.kg; }));
+  var range = max - min || 1;
+  var first = last8[0].kg, latest = last8[last8.length-1].kg;
+  var diff = latest - first;
+  var trend = diff < -0.5 ? '↓ ' + Math.abs(diff.toFixed(1)) + 'kg' : diff > 0.5 ? '↑ ' + diff.toFixed(1) + 'kg' : '→ Stable';
+  var trendCol = diff < -0.5 ? 'var(--green)' : diff > 0.5 ? 'var(--orange)' : 'var(--blue)';
+
+  var points = last8.map(function(e, i) {
+    var x = (i / (last8.length - 1)) * 260;
+    var y = 50 - ((e.kg - min) / range) * 44;
+    return x + ',' + y;
+  }).join(' ');
+
+  return '<div style="background:var(--bg2);border:1.5px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+    + '<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:monospace;">Weight Trend</div>'
+    + '<div style="font-size:13px;font-weight:700;color:' + trendCol + ';">' + trend + '</div>'
+    + '</div>'
+    + '<svg viewBox="0 0 260 55" style="width:100%;height:55px;">'
+    + '<polyline points="' + points + '" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    + last8.map(function(e, i) {
+        var x = (i / (last8.length - 1)) * 260;
+        var y = 50 - ((e.kg - min) / range) * 44;
+        return '<circle cx="' + x + '" cy="' + y + '" r="3" fill="var(--blue)"/>';
+      }).join('')
+    + '</svg>'
+    + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t4);font-family:monospace;margin-top:4px;">'
+    + '<span>' + last8[0].date.slice(5) + '</span><span>' + latest + 'kg</span>'
+    + '</div></div>';
+}
+
+function clearMenoSlot(event, blockId, sessId, field, idx) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var s = getMenoSess(blockId, sessId); if (!s) ret
+  if (field === 'compound') s.compound = '';
+  else if (s[field]) s[field][idx] = '';
+  saveDB();
+  renderMenoActive();
+}
+
+
+
 
 </script>
 </body>
